@@ -15,6 +15,7 @@ const WINNER_RANK_KEY: &[u8] = b"rank";
 const POLL_KEY: &[u8] = b"poll";
 const VOTE_KEY: &[u8] = b"user";
 const WINNING_COMBINATION_KEY: &[u8] = b"winning";
+const BIG_WINNER_KEY: &[u8] = b"big";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
@@ -223,4 +224,12 @@ pub fn lottery_winning_combination_storage_read<T: Storage>(
     storage: &T,
 ) -> ReadonlyBucket<T, String> {
     bucket_read(WINNING_COMBINATION_KEY, storage)
+}
+
+pub fn big_winner_storage<T: Storage>(storage: &mut T) -> Bucket<T, bool> {
+    bucket(BIG_WINNER_KEY, storage)
+}
+
+pub fn big_winner_storage_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, bool> {
+    bucket_read(BIG_WINNER_KEY, storage)
 }

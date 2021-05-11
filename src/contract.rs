@@ -7,10 +7,10 @@ use crate::msg::{
     InitMsg, QueryMsg, RoundResponse, WinnerResponse,
 };
 use crate::state::{
-    all_winners, config, config_read, lottery_winning_combination_storage, poll_storage,
-    poll_storage_read, poll_vote_storage, save_winner, user_combination_bucket,
-    user_combination_bucket_read, winner_count_by_rank_read, winner_storage, winner_storage_read,
-    PollInfoState, PollStatus, Proposal, State,
+    all_winners, big_winner_storage, big_winner_storage_read, config, config_read,
+    lottery_winning_combination_storage, poll_storage, poll_storage_read, poll_vote_storage,
+    save_winner, user_combination_bucket, user_combination_bucket_read, winner_count_by_rank_read,
+    winner_storage, winner_storage_read, PollInfoState, PollStatus, Proposal, State,
 };
 use crate::taxation::deduct_tax;
 use cosmwasm_std::{
@@ -308,7 +308,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
         ));
 
     // The jackpot after worker fee applied
-    let mut jackpot_after = jackpot.sub(fee_for_drand_worker).unwrap();
+    let jackpot_after = jackpot.sub(fee_for_drand_worker).unwrap();
 
     let msg_fee_worker = BankMsg::Send {
         from_address: env.contract.address.clone(),
@@ -322,8 +322,6 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
         )?],
     };
 
-    let mut all_msg = vec![msg_fee_worker.into()];
-
     // Update the state
     state.jackpot_reward = jackpot_after;
     state.lottery_counter += 1;
@@ -332,7 +330,7 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
     config(&mut deps.storage).save(&state)?;
 
     Ok(HandleResponse {
-        messages: all_msg,
+        messages: vec![msg_fee_worker.into()],
         log: vec![
             LogAttribute {
                 key: "action".to_string(),
@@ -528,35 +526,44 @@ pub fn handle_claim<S: Storage, A: Api, Q: Querier>(
             }
 
             if rank == 1 {
-                // Amount token holders can claim of the reward is a fee
-                let token_holder_fee_reward = state.jackpot_reward.mul(Decimal::percent(
-                    state.token_holder_percentage_fee_reward as u64,
-                ));
-                let mut holders_rewards = Uint128::zero();
-                holders_rewards = holders_rewards.add(token_holder_fee_reward);
+                match big_winner_storage_read(&deps.storage)
+                    .may_load(&last_lottery_counter_round.to_be_bytes())?
+                {
+                    None => {
+                        // Amount token holders can claim of the reward is a fee
+                        let token_holder_fee_reward = state.jackpot_reward.mul(Decimal::percent(
+                            state.token_holder_percentage_fee_reward as u64,
+                        ));
+                        let mut holders_rewards = Uint128::zero();
+                        holders_rewards = holders_rewards.add(token_holder_fee_reward);
 
-                if !holders_rewards.is_zero() {
-                    let loterra_human = deps
-                        .api
-                        .human_address(&state.loterra_staking_contract_address)?;
+                        if !holders_rewards.is_zero() {
+                            let loterra_human = deps
+                                .api
+                                .human_address(&state.loterra_staking_contract_address)?;
 
-                    let msg_update_global_index = QueryMsg::UpdateGlobalIndex {};
-                    let res_update_global_index = encode_msg_execute(
-                        msg_update_global_index,
-                        loterra_human,
-                        vec![deduct_tax(
-                            &deps,
-                            Coin {
-                                denom: state.denom_stable.clone(),
-                                amount: holders_rewards,
-                            },
-                        )?],
-                    )?;
-                    msg.push(res_update_global_index);
-                    state.jackpot_reward =
-                        state.jackpot_reward.sub(token_holder_fee_reward).unwrap();
-                    config(&mut deps.storage).save(&state);
-                }
+                            let msg_update_global_index = QueryMsg::UpdateGlobalIndex {};
+                            let res_update_global_index = encode_msg_execute(
+                                msg_update_global_index,
+                                loterra_human,
+                                vec![deduct_tax(
+                                    &deps,
+                                    Coin {
+                                        denom: state.denom_stable.clone(),
+                                        amount: holders_rewards,
+                                    },
+                                )?],
+                            )?;
+                            msg.push(res_update_global_index);
+                            state.jackpot_reward =
+                                state.jackpot_reward.sub(token_holder_fee_reward).unwrap();
+                            config(&mut deps.storage).save(&state)?;
+                            big_winner_storage(&mut deps.storage)
+                                .save(&last_lottery_counter_round.to_be_bytes(), &true)?;
+                        }
+                    }
+                    Some(_) => {}
+                };
             }
         }
     }
@@ -1524,13 +1531,17 @@ mod tests {
             }
         }
         #[test]
-        fn success() {
+        fn success_with_big_winner() {
             let before_all = before_all();
-            let mut deps = mock_dependencies(before_all.default_length, &[]);
+            let mut deps = mock_dependencies_custom(before_all.default_length, &[]);
             default_init(&mut deps);
             let addr = deps
                 .api
                 .canonical_address(&before_all.default_sender)
+                .unwrap();
+            let addr2 = deps
+                .api
+                .canonical_address(&before_all.default_sender_two)
                 .unwrap();
             let mut state = config(&mut deps.storage).load().unwrap();
             // Save combination by senders
@@ -1539,11 +1550,33 @@ mod tests {
                     Some(combinations) => {
                         let mut modified = combinations;
                         modified.push("123456".to_string());
+                        modified.push("123456".to_string());
                         modified.push("12345f".to_string());
                         modified.push("1234a6".to_string());
                         Ok(modified)
                     }
                     None => Ok(vec![
+                        "123456".to_string(),
+                        "123456".to_string(),
+                        "12345f".to_string(),
+                        "1234a6".to_string(),
+                        "000000".to_string(),
+                    ]),
+                })
+                .unwrap();
+            // Save combination by senders
+            user_combination_bucket(&mut deps.storage, state.lottery_counter)
+                .update(addr2.as_slice(), |exists| match exists {
+                    Some(combinations) => {
+                        let mut modified = combinations;
+                        modified.push("123456".to_string());
+                        modified.push("123456".to_string());
+                        modified.push("12345f".to_string());
+                        modified.push("1234a6".to_string());
+                        Ok(modified)
+                    }
+                    None => Ok(vec![
+                        "123456".to_string(),
                         "123456".to_string(),
                         "12345f".to_string(),
                         "1234a6".to_string(),
@@ -1556,6 +1589,7 @@ mod tests {
                 .save(&state.lottery_counter.to_be_bytes(), &"123456".to_string())
                 .unwrap();
             state.lottery_counter = 2;
+            state.jackpot_reward = Uint128(1_000_000);
             config(&mut deps.storage).save(&state).unwrap();
 
             let msg = HandleMsg::Claim { addresses: None };
@@ -1566,6 +1600,28 @@ mod tests {
             )
             .unwrap();
             println!("{:?}", res);
+            assert_eq!(
+                res.messages[0],
+                CosmosMsg::Wasm(WasmMsg::Execute {
+                    contract_addr: deps
+                        .api
+                        .human_address(&state.loterra_staking_contract_address)
+                        .unwrap(),
+                    msg: Binary::from(r#"{"update_global_index":{}}"#.as_bytes()),
+                    send: vec![Coin {
+                        denom: "ust".to_string(),
+                        amount: Uint128(99999)
+                    }],
+                })
+            );
+            // Check if only send 1 time the rewards to staking contract
+            let res = handle(
+                &mut deps,
+                mock_env(before_all.default_sender_two, &[]),
+                msg.clone(),
+            )
+            .unwrap();
+
             assert_eq!(
                 res,
                 HandleResponse {
@@ -1584,10 +1640,99 @@ mod tests {
                 .unwrap();
             println!("{:?}", winners);
             assert!(!winners.claimed);
-            assert_eq!(winners.ranks.len(), 3);
+            assert_eq!(winners.ranks.len(), 4);
             assert_eq!(winners.ranks[0], 1);
-            assert_eq!(winners.ranks[1], 2);
+            assert_eq!(winners.ranks[1], 1);
             assert_eq!(winners.ranks[2], 2);
+            assert_eq!(winners.ranks[3], 2);
+
+            let big_winner = big_winner_storage_read(&deps.storage)
+                .may_load(&last_lottery_counter_round.to_be_bytes())
+                .unwrap();
+            assert!(big_winner.is_some());
+
+            let state_after = config_read(&deps.storage).load().unwrap();
+            // 10% for staking holders
+            assert_eq!(state_after.jackpot_reward, Uint128(900_000));
+            assert_ne!(state.jackpot_reward, state_after.jackpot_reward);
+        }
+        #[test]
+        fn success_with_no_big_winner() {
+            let before_all = before_all();
+            let mut deps = mock_dependencies_custom(before_all.default_length, &[]);
+            default_init(&mut deps);
+            let addr = deps
+                .api
+                .canonical_address(&before_all.default_sender)
+                .unwrap();
+            let addr2 = deps
+                .api
+                .canonical_address(&before_all.default_sender_two)
+                .unwrap();
+            let mut state = config(&mut deps.storage).load().unwrap();
+            // Save combination by senders
+            user_combination_bucket(&mut deps.storage, state.lottery_counter)
+                .update(addr.as_slice(), |exists| match exists {
+                    Some(combinations) => {
+                        let mut modified = combinations;
+                        modified.push("12345f".to_string());
+                        modified.push("1234a6".to_string());
+                        Ok(modified)
+                    }
+                    None => Ok(vec![
+                        "12345f".to_string(),
+                        "1234a6".to_string(),
+                        "000000".to_string(),
+                    ]),
+                })
+                .unwrap();
+            // Save winning combination
+            lottery_winning_combination_storage(&mut deps.storage)
+                .save(&state.lottery_counter.to_be_bytes(), &"123456".to_string())
+                .unwrap();
+            state.lottery_counter = 2;
+            state.jackpot_reward = Uint128(1_000_000);
+            config(&mut deps.storage).save(&state).unwrap();
+
+            let msg = HandleMsg::Claim { addresses: None };
+            let res = handle(
+                &mut deps,
+                mock_env(before_all.default_sender, &[]),
+                msg.clone(),
+            )
+            .unwrap();
+
+            assert_eq!(
+                res,
+                HandleResponse {
+                    messages: vec![],
+                    log: vec![LogAttribute {
+                        key: "action".to_string(),
+                        value: "claim".to_string()
+                    }],
+                    data: None
+                }
+            );
+
+            let last_lottery_counter_round = state.lottery_counter - 1;
+            let winners = winner_storage_read(&deps.storage, last_lottery_counter_round)
+                .load(&addr.as_slice())
+                .unwrap();
+            println!("{:?}", winners);
+            assert!(!winners.claimed);
+            assert_eq!(winners.ranks.len(), 2);
+            assert_eq!(winners.ranks[0], 2);
+            assert_eq!(winners.ranks[1], 2);
+
+            let big_winner = big_winner_storage_read(&deps.storage)
+                .may_load(&last_lottery_counter_round.to_be_bytes())
+                .unwrap();
+            assert!(big_winner.is_none());
+
+            let state_after = config_read(&deps.storage).load().unwrap();
+            // 10% for staking holders
+            assert_eq!(state_after.jackpot_reward, Uint128(1_000_000));
+            assert_eq!(state.jackpot_reward, state_after.jackpot_reward);
         }
     }
     mod register {
