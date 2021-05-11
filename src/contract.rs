@@ -3,14 +3,14 @@ use crate::helpers::{
     wrapper_msg_loterra, wrapper_msg_terrand,
 };
 use crate::msg::{
-    AllCombinationResponse, AllWinnersResponse, CombinationInfo, ConfigResponse, GetPollResponse,
-    HandleMsg, InitMsg, QueryMsg, RoundResponse, WinnerResponse,
+    AllCombinationResponse, AllWinnersResponse, ConfigResponse, GetPollResponse, HandleMsg,
+    InitMsg, QueryMsg, RoundResponse, WinnerResponse,
 };
 use crate::state::{
-    all_winners, combination_bucket, combination_bucket_read, config, config_read,
-    lottery_winning_combination_storage, poll_storage, poll_storage_read, poll_vote_storage,
-    save_winner, user_combination_bucket, user_combination_bucket_read, winner_count_by_rank_read,
-    winner_storage, winner_storage_read, PollInfoState, PollStatus, Proposal, State,
+    all_winners, config, config_read, lottery_winning_combination_storage, poll_storage,
+    poll_storage_read, poll_vote_storage, save_winner, user_combination_bucket,
+    user_combination_bucket_read, winner_count_by_rank_read, winner_storage, winner_storage_read,
+    PollInfoState, PollStatus, Proposal, State,
 };
 use crate::taxation::deduct_tax;
 use cosmwasm_std::{
@@ -209,17 +209,7 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
 
     // save combination by combinations
     let addr = deps.api.canonical_address(&env.message.sender)?;
-    combination_bucket(&mut deps.storage, state.lottery_counter).update(
-        combination.as_bytes(),
-        |exists| match exists {
-            Some(addrs) => {
-                let mut modified = addrs;
-                modified.push(addr.clone());
-                Ok(modified)
-            }
-            None => Ok(vec![addr.clone()]),
-        },
-    )?;
+
     // Save combination by senders
     user_combination_bucket(&mut deps.storage, state.lottery_counter).update(
         addr.as_slice(),
@@ -317,24 +307,8 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
             state.fee_for_drand_worker_in_percentage as u64,
         ));
 
-    // Amount token holders can claim of the reward is a fee
-    let token_holder_fee_reward = jackpot.mul(Decimal::percent(
-        state.token_holder_percentage_fee_reward as u64,
-    ));
-    // Total fees if winner of the jackpot
-    let total_fee = fee_for_drand_worker.add(token_holder_fee_reward);
-
     // The jackpot after worker fee applied
     let mut jackpot_after = jackpot.sub(fee_for_drand_worker).unwrap();
-    let mut holders_rewards = Uint128::zero();
-    let is_big_winner_empty = combination_bucket_read(&deps.storage, state.lottery_counter)
-        .may_load(winning_combination.as_bytes())?;
-
-    // Prepare sending jackpot to staking holder if there is a big winner
-    if is_big_winner_empty.is_some() {
-        jackpot_after = jackpot.sub(total_fee).unwrap();
-        holders_rewards = holders_rewards.add(token_holder_fee_reward);
-    }
 
     let msg_fee_worker = BankMsg::Send {
         from_address: env.contract.address.clone(),
@@ -350,26 +324,6 @@ pub fn handle_play<S: Storage, A: Api, Q: Querier>(
 
     let mut all_msg = vec![msg_fee_worker.into()];
 
-    if !holders_rewards.is_zero() {
-        let loterra_human = deps
-            .api
-            .human_address(&state.loterra_staking_contract_address)?;
-        // let amount_to_send = holders_rewards.sub(tax_cap.cap)?;
-
-        let msg_update_global_index = QueryMsg::UpdateGlobalIndex {};
-        let res_update_global_index = encode_msg_execute(
-            msg_update_global_index,
-            loterra_human,
-            vec![deduct_tax(
-                &deps,
-                Coin {
-                    denom: state.denom_stable.clone(),
-                    amount: holders_rewards,
-                },
-            )?],
-        )?;
-        all_msg.push(res_update_global_index);
-    }
     // Update the state
     state.jackpot_reward = jackpot_after;
     state.lottery_counter += 1;
@@ -494,7 +448,7 @@ pub fn handle_claim<S: Storage, A: Api, Q: Querier>(
     env: Env,
     addresses: Option<Vec<HumanAddr>>,
 ) -> StdResult<HandleResponse> {
-    let state = config(&mut deps.storage).load()?;
+    let mut state = config(&mut deps.storage).load()?;
 
     if state.safe_lock {
         return Err(StdError::generic_err(
@@ -552,7 +506,7 @@ pub fn handle_claim<S: Storage, A: Api, Q: Querier>(
             backtrace: None,
         });
     }
-
+    let mut msg = vec![];
     for (addr, comb_raw) in combination {
         for combo in comb_raw {
             let match_count = count_match(&combo, &lottery_winning_combination);
@@ -572,11 +526,43 @@ pub fn handle_claim<S: Storage, A: Api, Q: Querier>(
                     rank,
                 )?;
             }
+
+            if rank == 1 {
+                // Amount token holders can claim of the reward is a fee
+                let token_holder_fee_reward = state.jackpot_reward.mul(Decimal::percent(
+                    state.token_holder_percentage_fee_reward as u64,
+                ));
+                let mut holders_rewards = Uint128::zero();
+                holders_rewards = holders_rewards.add(token_holder_fee_reward);
+
+                if !holders_rewards.is_zero() {
+                    let loterra_human = deps
+                        .api
+                        .human_address(&state.loterra_staking_contract_address)?;
+
+                    let msg_update_global_index = QueryMsg::UpdateGlobalIndex {};
+                    let res_update_global_index = encode_msg_execute(
+                        msg_update_global_index,
+                        loterra_human,
+                        vec![deduct_tax(
+                            &deps,
+                            Coin {
+                                denom: state.denom_stable.clone(),
+                                amount: holders_rewards,
+                            },
+                        )?],
+                    )?;
+                    msg.push(res_update_global_index);
+                    state.jackpot_reward =
+                        state.jackpot_reward.sub(token_holder_fee_reward).unwrap();
+                    config(&mut deps.storage).save(&state);
+                }
+            }
         }
     }
 
     Ok(HandleResponse {
-        messages: vec![],
+        messages: msg,
         log: vec![LogAttribute {
             key: "action".to_string(),
             value: "claim".to_string(),
@@ -1241,9 +1227,10 @@ pub fn query<S: Storage, A: Api, Q: Querier>(
 ) -> StdResult<Binary> {
     let response = match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?)?,
-        QueryMsg::Combination { lottery_id } => {
-            to_binary(&query_all_combination(deps, lottery_id)?)?
-        }
+        QueryMsg::Combination {
+            lottery_id,
+            address,
+        } => to_binary(&query_all_combination(deps, lottery_id, address)?)?,
         QueryMsg::Winner { lottery_id } => to_binary(&query_all_winner(deps, lottery_id)?)?,
         QueryMsg::GetPoll { poll_id } => to_binary(&query_poll(deps, poll_id)?)?,
         QueryMsg::GetRound {} => to_binary(&query_round(deps)?)?,
@@ -1258,33 +1245,25 @@ fn query_config<S: Storage, A: Api, Q: Querier>(
     let state = config_read(&deps.storage).load()?;
     Ok(state)
 }
-
 fn query_all_combination<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     lottery_id: u64,
+    address: HumanAddr,
 ) -> StdResult<AllCombinationResponse> {
-    let combinations: StdResult<Vec<CombinationInfo>> =
-        combination_bucket_read(&deps.storage, lottery_id)
-            .range(None, None, Order::Descending)
-            .map(|item| {
-                let (comb, cann_addrs) = item?;
-                let addrs: StdResult<Vec<HumanAddr>> = cann_addrs
-                    .iter()
-                    .map(|c| deps.api.human_address(c))
-                    .collect();
-                // TODO the safety of unwrap
-                let key = String::from_utf8(comb).unwrap();
-                Ok(CombinationInfo {
-                    combination: key,
-                    addresses: addrs?,
+    let addr = deps.api.canonical_address(&address)?;
+    let combo =
+        match user_combination_bucket_read(&deps.storage, lottery_id).may_load(addr.as_slice())? {
+            None => {
+                return Err(StdError::NotFound {
+                    kind: "not found".to_string(),
+                    backtrace: None,
                 })
-            })
-            .collect();
-    Ok(AllCombinationResponse {
-        combination: combinations?,
-    })
-}
+            }
+            Some(combination) => combination,
+        };
 
+    Ok(AllCombinationResponse { combination: combo })
+}
 fn query_all_winner<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     lottery_id: u64,
@@ -1686,10 +1665,6 @@ mod tests {
                 }
             );
             // Check combination added with success
-            let store = combination_bucket(&mut deps.storage, 1u64)
-                .load(&"1e3fab".as_bytes())
-                .unwrap();
-            assert_eq!(1, store.len());
             let addr = deps
                 .api
                 .canonical_address(&before_all.default_sender)
@@ -1698,35 +1673,6 @@ mod tests {
                 .load(addr.as_slice())
                 .unwrap();
             assert_eq!(1, store_two.len());
-
-            let player1 = deps
-                .api
-                .canonical_address(&before_all.default_sender)
-                .unwrap();
-            assert!(store.contains(&player1));
-            //New player
-            let _res = handle(
-                &mut deps,
-                mock_env(
-                    before_all.default_sender_two.clone(),
-                    &[Coin {
-                        denom: "ust".to_string(),
-                        amount: Uint128(1_000_000),
-                    }],
-                ),
-                msg.clone(),
-            )
-            .unwrap();
-            let store = combination_bucket_read(&mut deps.storage, 1u64)
-                .load(&"1e3fab".as_bytes())
-                .unwrap();
-            let player2 = deps
-                .api
-                .canonical_address(&before_all.default_sender_two)
-                .unwrap();
-            assert_eq!(2, store.len());
-            assert!(store.contains(&player1));
-            assert!(store.contains(&player2));
         }
         #[test]
         fn register_fail_if_sender_sent_empty_funds() {
@@ -2308,7 +2254,7 @@ mod tests {
             env.block.time = state.block_time_play + 1000;
             let res = handle_play(&mut deps, env.clone()).unwrap();
             println!("{:?}", res);
-            assert_eq!(res.messages.len(), 2);
+            assert_eq!(res.messages.len(), 1);
             assert_eq!(
                 res.messages[0],
                 CosmosMsg::Bank(BankMsg::Send {
@@ -2317,21 +2263,6 @@ mod tests {
                     amount: vec![Coin {
                         denom: "ust".to_string(),
                         amount: Uint128(719)
-                    }]
-                })
-            );
-
-            assert_eq!(
-                res.messages[1],
-                CosmosMsg::Wasm(WasmMsg::Execute {
-                    contract_addr: deps
-                        .api
-                        .human_address(&state.loterra_staking_contract_address)
-                        .unwrap(),
-                    msg: Binary::from(r#"{"update_global_index":{}}"#.as_bytes()),
-                    send: vec![Coin {
-                        denom: "ust".to_string(),
-                        amount: Uint128(719999)
                     }]
                 })
             );
@@ -2347,7 +2278,7 @@ mod tests {
             assert_eq!(state.jackpot_reward, Uint128::zero());
             assert_ne!(state_after.jackpot_reward, state.jackpot_reward);
             // 720720 total fees
-            assert_eq!(state_after.jackpot_reward, Uint128(6_479_280));
+            assert_eq!(state_after.jackpot_reward, Uint128(7_199_280));
             assert_eq!(state_after.latest_winning_number, "4f64526c2b6a3650486e4e3834647931326e344f71314272476b74443733465734534b50696878664239493d");
             assert_eq!(state_after.lottery_counter, 2);
             assert_ne!(state_after.lottery_counter, state.lottery_counter);
