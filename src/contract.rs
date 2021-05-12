@@ -506,65 +506,78 @@ pub fn handle_claim<S: Storage, A: Api, Q: Querier>(
     }
     let mut msg = vec![];
     for (addr, comb_raw) in combination {
-        for combo in comb_raw {
-            let match_count = count_match(&combo, &lottery_winning_combination);
-            let rank = match match_count {
-                count if count == lottery_winning_combination.len() => 1,
-                count if count == lottery_winning_combination.len() - 1 => 2,
-                count if count == lottery_winning_combination.len() - 2 => 3,
-                count if count == lottery_winning_combination.len() - 3 => 4,
-                _ => 0,
-            } as u8;
+        match winner_storage_read(&deps.storage, last_lottery_counter_round)
+            .may_load(addr.as_slice())?
+        {
+            None => {
+                for combo in comb_raw {
+                    let match_count = count_match(&combo, &lottery_winning_combination);
+                    let rank = match match_count {
+                        count if count == lottery_winning_combination.len() => 1,
+                        count if count == lottery_winning_combination.len() - 1 => 2,
+                        count if count == lottery_winning_combination.len() - 2 => 3,
+                        count if count == lottery_winning_combination.len() - 3 => 4,
+                        _ => 0,
+                    } as u8;
 
-            if rank > 0 {
-                save_winner(
-                    &mut deps.storage,
-                    last_lottery_counter_round,
-                    addr.clone(),
-                    rank,
-                )?;
-            }
+                    if rank > 0 {
+                        match winner_storage_read(&deps.storage, last_lottery_counter_round)
+                            .may_load(addr.as_slice())?
+                        {
+                            None => {
+                                save_winner(
+                                    &mut deps.storage,
+                                    last_lottery_counter_round,
+                                    addr.clone(),
+                                    rank,
+                                )?;
+                                if rank == 1 {
+                                    match big_winner_storage_read(&deps.storage)
+                                        .may_load(&last_lottery_counter_round.to_be_bytes())?
+                                    {
+                                        None => {
+                                            // Amount token holders can claim of the reward is a fee
+                                            let token_holder_fee_reward = state.jackpot_reward.mul(Decimal::percent(
+                                                state.token_holder_percentage_fee_reward as u64,
+                                            ));
+                                            let mut holders_rewards = Uint128::zero();
+                                            holders_rewards = holders_rewards.add(token_holder_fee_reward);
 
-            if rank == 1 {
-                match big_winner_storage_read(&deps.storage)
-                    .may_load(&last_lottery_counter_round.to_be_bytes())?
-                {
-                    None => {
-                        // Amount token holders can claim of the reward is a fee
-                        let token_holder_fee_reward = state.jackpot_reward.mul(Decimal::percent(
-                            state.token_holder_percentage_fee_reward as u64,
-                        ));
-                        let mut holders_rewards = Uint128::zero();
-                        holders_rewards = holders_rewards.add(token_holder_fee_reward);
+                                            if !holders_rewards.is_zero() {
+                                                let loterra_human = deps
+                                                    .api
+                                                    .human_address(&state.loterra_staking_contract_address)?;
 
-                        if !holders_rewards.is_zero() {
-                            let loterra_human = deps
-                                .api
-                                .human_address(&state.loterra_staking_contract_address)?;
-
-                            let msg_update_global_index = QueryMsg::UpdateGlobalIndex {};
-                            let res_update_global_index = encode_msg_execute(
-                                msg_update_global_index,
-                                loterra_human,
-                                vec![deduct_tax(
-                                    &deps,
-                                    Coin {
-                                        denom: state.denom_stable.clone(),
-                                        amount: holders_rewards,
-                                    },
-                                )?],
-                            )?;
-                            msg.push(res_update_global_index);
-                            state.jackpot_reward =
-                                state.jackpot_reward.sub(token_holder_fee_reward).unwrap();
-                            config(&mut deps.storage).save(&state)?;
-                            big_winner_storage(&mut deps.storage)
-                                .save(&last_lottery_counter_round.to_be_bytes(), &true)?;
+                                                let msg_update_global_index = QueryMsg::UpdateGlobalIndex {};
+                                                let res_update_global_index = encode_msg_execute(
+                                                    msg_update_global_index,
+                                                    loterra_human,
+                                                    vec![deduct_tax(
+                                                        &deps,
+                                                        Coin {
+                                                            denom: state.denom_stable.clone(),
+                                                            amount: holders_rewards,
+                                                        },
+                                                    )?],
+                                                )?;
+                                                msg.push(res_update_global_index);
+                                                state.jackpot_reward =
+                                                    state.jackpot_reward.sub(token_holder_fee_reward).unwrap();
+                                                config(&mut deps.storage).save(&state)?;
+                                                big_winner_storage(&mut deps.storage)
+                                                    .save(&last_lottery_counter_round.to_be_bytes(), &true)?;
+                                            }
+                                        }
+                                        Some(_) => {}
+                                    }
+                                }
+                            }
+                            Some(_) => {}
                         }
                     }
-                    Some(_) => {}
-                };
+                }
             }
+            Some(_) => {}
         }
     }
 
@@ -1595,7 +1608,7 @@ mod tests {
             let msg = HandleMsg::Claim { addresses: None };
             let res = handle(
                 &mut deps,
-                mock_env(before_all.default_sender, &[]),
+                mock_env(before_all.default_sender.clone(), &[]),
                 msg.clone(),
             )
             .unwrap();
@@ -1633,6 +1646,13 @@ mod tests {
                     data: None
                 }
             );
+            // Claim again is not possible
+            let res = handle(
+                &mut deps,
+                mock_env(before_all.default_sender, &[]),
+                msg.clone(),
+            )
+            .unwrap();
 
             let last_lottery_counter_round = state.lottery_counter - 1;
             let winners = winner_storage_read(&deps.storage, last_lottery_counter_round)
