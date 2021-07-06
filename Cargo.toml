@@ -3,6 +3,9 @@ name = "loterra"
 version = "2.0.0"
 authors = ["0xantman <antho74830@gmail.com>"]
 edition = "2018"
+description= "LoTerra is a smart contract lottery on Terra Luna Blockchain, a self-executing contract in which the terms of the agreement between the Player and the Lottery are written directly in lines of code."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/LoTerra/loterra-contract"
 
 exclude = [
   # Those files are rust-optimizer artifacts. You might want to commit them for convenience but they should not be part of the source code publication.
