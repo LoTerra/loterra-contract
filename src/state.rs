@@ -1,12 +1,13 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{CanonicalAddr, Deps, Order, StdResult, Storage, Uint128};
+use cosmwasm_std::{CanonicalAddr, Deps, Order, StdResult, Storage, Uint128, Binary};
 use cw_storage_plus::{Item, Map};
 use std::ops::Add;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
+    pub dao_contract_address: CanonicalAddr,
     pub block_time_play: u64,
     pub every_block_time_play: u64,
     pub denom_stable: String,
@@ -175,4 +176,25 @@ pub fn all_winners(
             Ok((CanonicalAddr::from(addr), claim))
         })
         .collect()
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub enum Proposal {
+    LotteryEveryBlockTime,
+    HolderFeePercentage,
+    DrandWorkerFeePercentage,
+    PrizesPerRanks,
+    JackpotRewardPercentage,
+    AmountToRegister,
+    SecurityMigration,
+    DaoFunding,
+    StakingContractMigration,
+    PollSurvey
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct Migration {
+    pub contract_addr: String,
+    pub new_code_id: u64,
+    pub msg: Binary,
 }

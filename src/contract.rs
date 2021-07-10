@@ -1,13 +1,6 @@
 use crate::helpers::{count_match, is_lower_hex};
-use crate::msg::{
-    AllCombinationResponse, AllWinnersResponse, ConfigResponse, ExecuteMsg,
-    InstantiateMsg, QueryMsg, RoundResponse, WinnerResponse,
-};
-use crate::state::{
-    all_winners, combination_save, read_state, save_winner, store_state, PollStatus,
-    Proposal, State, ALL_USER_COMBINATION, COUNT_PLAYERS, COUNT_TICKETS, JACKPOT, PREFIXED_RANK, PREFIXED_USER_COMBINATION, PREFIXED_WINNER, STATE,
-    WINNING_COMBINATION,
-};
+use crate::msg::{AllCombinationResponse, AllWinnersResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg, RoundResponse, WinnerResponse, DaoQueryMsg, GetPollResponse};
+use crate::state::{all_winners, combination_save, read_state, save_winner, store_state, PollStatus, Proposal, State, ALL_USER_COMBINATION, COUNT_PLAYERS, COUNT_TICKETS, JACKPOT, PREFIXED_RANK, PREFIXED_USER_COMBINATION, PREFIXED_WINNER, STATE, WINNING_COMBINATION, Migration};
 use crate::taxation::deduct_tax;
 use cosmwasm_std::{
     attr, entry_point, to_binary, Addr, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Deps,
@@ -16,6 +9,7 @@ use cosmwasm_std::{
 };
 use cw20::{BalanceResponse, Cw20ExecuteMsg, Cw20QueryMsg};
 use std::ops::{Add, Mul};
+use loterra_staking_contract::msg::MigrateMsg;
 
 const DRAND_GENESIS_TIME: u64 = 1595431050;
 const DRAND_PERIOD: u64 = 30;
@@ -36,6 +30,7 @@ pub fn instantiate(
     msg: InstantiateMsg,
 ) -> StdResult<Response> {
     let state = State {
+        dao_contract_address: deps.api.addr_canonicalize(info.sender.as_str())?,
         block_time_play: msg.block_time_play,
         every_block_time_play: msg.every_block_time_play,
         denom_stable: msg.denom_stable,
@@ -541,7 +536,10 @@ pub fn handle_present_proposal(
 ) -> StdResult<Response> {
     // Load storage
     let mut state = read_state(deps.storage)?;
-    let poll = POLL.load(deps.storage, &poll_id.to_be_bytes())?;
+
+    let msg = DaoQueryMsg::GetPoll { poll_id };
+    let execute_query = WasmQuery::Smart { contract_addr: deps.api.addr_humanize( &state.dao_contract_address)?.to_string(), msg: to_binary(&msg)? };
+    let poll: GetPollResponse = deps.querier.query(&execute_query.into())?;
 
     // Ensure the sender not sending funds accidentally
     if !info.funds.is_empty() {
@@ -550,36 +548,8 @@ pub fn handle_present_proposal(
         ));
     }
     // Ensure the proposal is still in Progress
-    if poll.status != PollStatus::InProgress {
+    if poll.status != PollStatus::Passed {
         return Err(StdError::generic_err("Unauthorized"));
-    }
-
-    let total_weight_bonded = total_weight(&deps, &state);
-    let total_vote_weight = poll.weight_yes_vote.add(poll.weight_no_vote);
-    let total_yes_weight_percentage = if !poll.weight_yes_vote.is_zero() {
-        poll.weight_yes_vote.u128() * 100 / total_vote_weight.u128()
-    } else {
-        0
-    };
-    let total_no_weight_percentage = if !poll.weight_no_vote.is_zero() {
-        poll.weight_no_vote.u128() * 100 / total_vote_weight.u128()
-    } else {
-        0
-    };
-
-    if poll.weight_yes_vote.add(poll.weight_no_vote).u128() * 100 / total_weight_bonded.u128() < 50
-    {
-        // Ensure the proposal is ended
-        if poll.end_height > env.block.height {
-            return Err(StdError::generic_err("Proposal still in progress"));
-        }
-    }
-
-    // Reject the proposal
-    // Based on the recommendation of security audit
-    // We recommend to not reject votes based on the number of votes, but rather by the stake of the voters.
-    if total_yes_weight_percentage < 50 || total_no_weight_percentage > 33 {
-        return reject_proposal(deps.storage, poll_id);
     }
 
     let mut msgs = vec![];
@@ -597,32 +567,26 @@ pub fn handle_present_proposal(
         Proposal::AmountToRegister => {
             state.price_per_ticket_to_register = poll.amount;
         }
-        Proposal::PrizePerRank => {
-            state.prize_rank_winner_percentage = poll.prize_rank;
+        Proposal::PrizesPerRanks => {
+            state.prize_rank_winner_percentage = poll.prizes_per_ranks;
         }
         Proposal::HolderFeePercentage => {
             state.token_holder_percentage_fee_reward = poll.amount.u128() as u8
         }
         Proposal::SecurityMigration => {
-            let contract_balance = deps
-                .querier
-                .query_balance(&env.contract.address, &state.denom_stable)?;
+            let migration: Migration = poll.migration?;
 
-            let msg = BankMsg::Send {
-                to_address: poll.migration_address.unwrap(),
-                amount: vec![deduct_tax(
-                    &deps.querier,
-                    Coin {
-                        denom: state.denom_stable.to_string(),
-                        amount: contract_balance.amount,
-                    },
-                )?],
+            let migrate = WasmMsg::Migrate {
+                contract_addr: migration.contract_addr,
+                new_code_id: migration.new_code_id,
+                msg: migration.msg
             };
-            msgs.push(msg.into())
+
+            msgs.push(migrate.into())
         }
         Proposal::DaoFunding => {
             let recipient = match poll.migration_address {
-                None => deps.api.addr_humanize(&poll.creator)?,
+                None => &poll.creator.to_string(),
                 Some(address) => Addr::unchecked(address),
             };
 
