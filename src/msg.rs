@@ -1,4 +1,4 @@
-use crate::state::{PollStatus, Proposal, State, WinnerRewardClaims};
+use crate::state::{PollStatus, State, WinnerRewardClaims};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -30,26 +30,8 @@ pub enum ExecuteMsg {
     Claim { addresses: Option<Vec<String>> },
     /// Collect jackpot
     Collect { address: Option<String> },
-    /// DAO
-    /// Make a proposal
-    Poll {
-        description: String,
-        proposal: Proposal,
-        amount: Option<Uint128>,
-        prize_per_rank: Option<Vec<u8>>,
-        recipient: Option<String>,
-    },
-    /// Vote the proposal
-    Vote { poll_id: u64, approve: bool },
-    /// Valid a proposal
+    /// Present poll
     PresentPoll { poll_id: u64 },
-    /// Reject a proposal
-    RejectPoll { poll_id: u64 },
-    /// Admin
-    /// Security owner can switch on off to prevent exploit
-    SafeLock {},
-    /// Admin renounce and restore contract address to admin for full decentralization
-    Renounce {},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -61,8 +43,6 @@ pub enum QueryMsg {
     Combination { lottery_id: u64, address: String },
     /// Winner lottery rank and address
     Winner { lottery_id: u64 },
-    /// Get specific poll
-    GetPoll { poll_id: u64 },
     /// Count players by lottery id
     CountPlayer { lottery_id: u64 },
     /// Count ticket sold by lottery id
@@ -102,23 +82,6 @@ pub struct WinnerResponse {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct AllWinnersResponse {
     pub winners: Vec<WinnerResponse>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct GetPollResponse {
-    pub creator: String,
-    pub status: PollStatus,
-    pub end_height: u64,
-    pub start_height: u64,
-    pub description: String,
-    pub amount: Uint128,
-    pub prize_per_rank: Vec<u8>,
-    pub migration_address: Option<String>,
-    pub weight_yes_vote: Uint128,
-    pub weight_no_vote: Uint128,
-    pub yes_vote: u64,
-    pub no_vote: u64,
-    pub proposal: Proposal,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
