@@ -534,6 +534,12 @@ pub fn handle_present_proposal(
     info: MessageInfo,
     poll_id: u64,
 ) -> StdResult<Response> {
+    // Ensure the sender not sending funds accidentally
+    if !info.funds.is_empty() {
+        return Err(StdError::generic_err(
+            "Do not send funds with present proposal",
+        ));
+    }
     // Load storage
     let mut state = read_state(deps.storage)?;
 
@@ -541,12 +547,6 @@ pub fn handle_present_proposal(
     let execute_query = WasmQuery::Smart { contract_addr: deps.api.addr_humanize( &state.dao_contract_address)?.to_string(), msg: to_binary(&msg)? };
     let poll: GetPollResponse = deps.querier.query(&execute_query.into())?;
 
-    // Ensure the sender not sending funds accidentally
-    if !info.funds.is_empty() {
-        return Err(StdError::generic_err(
-            "Do not send funds with present proposal",
-        ));
-    }
     // Ensure the proposal is still in Progress
     if poll.status != PollStatus::Passed {
         return Err(StdError::generic_err("Unauthorized"));
@@ -585,7 +585,7 @@ pub fn handle_present_proposal(
             msgs.push(migrate.into())
         }
         Proposal::DaoFunding => {
-            let recipient = match poll.migration_address {
+            let recipient = match poll.recipient {
                 None => &poll.creator.to_string(),
                 Some(address) => Addr::unchecked(address),
             };
@@ -607,7 +607,9 @@ pub fn handle_present_proposal(
             let loterra_balance: BalanceResponse = deps.querier.query(&res_balance)?;
 
             if loterra_balance.balance.u128() < poll.amount.u128() {
-                return reject_proposal(deps.storage, poll_id);
+                // Reject the proposal on DAO contract ?
+                return Err(StdError::generic_err("error not enough funds"))
+                //return reject_proposal(deps.storage, poll_id);
             }
             let msg_transfer = Cw20ExecuteMsg::Transfer {
                 recipient: recipient.to_string(),
@@ -628,7 +630,7 @@ pub fn handle_present_proposal(
         Proposal::StakingContractMigration => {
             state.loterra_staking_contract_address = deps
                 .api
-                .addr_canonicalize(&poll.migration_address.unwrap())?;
+                .addr_canonicalize(&poll.recipient.unwrap())?;
         }
         Proposal::PollSurvey => {}
         _ => {
@@ -636,15 +638,17 @@ pub fn handle_present_proposal(
         }
     }
 
-    // Save to storage
-    POLL.update(deps.storage, &poll_id.to_be_bytes(), |poll| match poll {
-        None => Err(StdError::generic_err("Not found")),
-        Some(poll_info) => {
-            let mut poll = poll_info;
-            poll.status = PollStatus::Passed;
-            Ok(poll)
-        }
-    })?;
+    // Give back a response to DAO contract
+    /*
+        POLL.update(deps.storage, &poll_id.to_be_bytes(), |poll| match poll {
+            None => Err(StdError::generic_err("Not found")),
+            Some(poll_info) => {
+                let mut poll = poll_info;
+                poll.status = PollStatus::Passed;
+                Ok(poll)
+            }
+        })?;
+    */
 
     store_state(deps.storage, &state)?;
 
@@ -654,7 +658,7 @@ pub fn handle_present_proposal(
         data: None,
         attributes: vec![
             attr("action", "present poll"),
-            attr("poll_id", poll_id),
+            attr("proposal", poll.proposal),
             attr("poll_result", "approved"),
         ],
     })
