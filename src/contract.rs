@@ -659,7 +659,8 @@ pub fn handle_present_proposal(
         attributes: vec![
             attr("action", "present poll"),
             attr("proposal", poll.proposal),
-            attr("poll_result", "approved"),
+            attr("result", "success"),
+            attr("poll_id", poll_id),
         ],
     })
 }
