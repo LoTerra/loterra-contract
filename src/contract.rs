@@ -534,23 +534,17 @@ pub fn handle_present_proposal(
     info: MessageInfo,
     poll_id: u64,
 ) -> StdResult<Response> {
-    // Ensure the sender not sending funds accidentally
-    if !info.funds.is_empty() {
-        return Err(StdError::generic_err(
-            "Do not send funds with present proposal",
-        ));
-    }
     // Load storage
     let mut state = read_state(deps.storage)?;
+    // Only Dao contract can call this message
+    if info.sender != state.dao_contract_address {
+        return Err(StdError::generic_err("Unauthorized"));
+    }
 
     let msg = DaoQueryMsg::GetPoll { poll_id };
     let execute_query = WasmQuery::Smart { contract_addr: deps.api.addr_humanize( &state.dao_contract_address)?.to_string(), msg: to_binary(&msg)? };
     let poll: GetPollResponse = deps.querier.query(&execute_query.into())?;
 
-    // Ensure the proposal is still in Progress
-    if poll.status != PollStatus::Passed {
-        return Err(StdError::generic_err("Unauthorized"));
-    }
 
     let mut msgs = vec![];
     // Valid the proposal
