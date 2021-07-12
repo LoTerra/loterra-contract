@@ -1,6 +1,6 @@
 use crate::helpers::{count_match, is_lower_hex};
 use crate::msg::{AllCombinationResponse, AllWinnersResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg, RoundResponse, WinnerResponse, DaoQueryMsg, GetPollResponse, Proposal, Migration};
-use crate::state::{all_winners, combination_save, read_state, save_winner, store_state, PollStatus, State, ALL_USER_COMBINATION, COUNT_PLAYERS, COUNT_TICKETS, JACKPOT, PREFIXED_RANK, PREFIXED_USER_COMBINATION, PREFIXED_WINNER, STATE, WINNING_COMBINATION};
+use crate::state::{all_winners, combination_save, read_state, save_winner, store_state, State, ALL_USER_COMBINATION, COUNT_PLAYERS, COUNT_TICKETS, JACKPOT, PREFIXED_RANK, PREFIXED_USER_COMBINATION, PREFIXED_WINNER, STATE, WINNING_COMBINATION};
 use crate::taxation::deduct_tax;
 use cosmwasm_std::{
     attr, entry_point, to_binary, Addr, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Deps,
@@ -8,16 +8,11 @@ use cosmwasm_std::{
     WasmQuery,
 };
 use cw20::{BalanceResponse, Cw20ExecuteMsg, Cw20QueryMsg};
-use std::ops::{Add, Mul};
-use loterra_staking_contract::msg::MigrateMsg;
+use std::ops::{Mul};
 
 const DRAND_GENESIS_TIME: u64 = 1595431050;
 const DRAND_PERIOD: u64 = 30;
 const DRAND_NEXT_ROUND_SECURITY: u64 = 10;
-const MAX_DESCRIPTION_LEN: u64 = 255;
-const MIN_DESCRIPTION_LEN: u64 = 6;
-const HOLDERS_MAX_REWARD: u8 = 20;
-const WORKER_MAX_REWARD: u8 = 10;
 const DIV_BLOCK_TIME_BY_X: u64 = 2;
 // Note, you can use StdResult in some functions where you do not
 // make use of the custom errors
@@ -628,7 +623,7 @@ pub fn handle_present_proposal(
                 .addr_canonicalize(&poll.recipient.unwrap())?;
         }
         Proposal::PollSurvey => {}
-        _ => {
+        _ =>
             // Give back a response to DAO contract
             return Ok(Response {
                 submessages: vec![],
@@ -639,8 +634,8 @@ pub fn handle_present_proposal(
                     attr("applied", false),
                     attr("poll_id", poll_id),
                 ],
-            });
-        }
+            }),
+
     }
 
     store_state(deps.storage, &state)?;
@@ -813,7 +808,6 @@ mod tests {
         const BLOCK_TIME_PLAY: u64 = 1610566920;
         const EVERY_BLOCK_TIME_PLAY: u64 = 50000;
         const POLL_DEFAULT_END_HEIGHT: u64 = 40_000;
-        const BONUS_BLOCK_TIME_END: u64 = 1610567920;
 
         let init_msg = InstantiateMsg {
             denom_stable: DENOM_STABLE.to_string(),
@@ -823,7 +817,6 @@ mod tests {
             terrand_contract_address: "terrand".to_string(),
             loterra_cw20_contract_address: "cw20".to_string(),
             loterra_staking_contract_address: "staking".to_string(),
-            holders_bonus_block_time_end: BONUS_BLOCK_TIME_END,
         };
         instantiate(deps, mock_env(), mock_info("addr0002", &[]), init_msg).unwrap();
     }
@@ -2496,9 +2489,9 @@ mod tests {
             default_init(deps.as_mut());
 
             let mut env = mock_env();
-            let info = mock_info(before_all.default_sender.as_str().clone(), &[]);
+            let info = mock_info("addr0002", &[]);
             let msg = ExecuteMsg::PresentPoll { poll_id: 1 };
-            let res = execute(deps.as_mut(), env, info, msg);
+            let res = execute(deps.as_mut(), env, info, msg).unwrap();
             println!("{:?}", res);
         }
         #[test]

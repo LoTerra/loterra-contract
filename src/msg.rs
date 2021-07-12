@@ -13,7 +13,7 @@ pub struct InstantiateMsg {
     pub terrand_contract_address: String,
     pub loterra_cw20_contract_address: String,
     pub loterra_staking_contract_address: String,
-    pub holders_bonus_block_time_end: u64,
+    // pub holders_bonus_block_time_end: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

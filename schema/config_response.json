@@ -3,29 +3,23 @@
   "title": "ConfigResponse",
   "type": "object",
   "required": [
-    "admin",
     "block_time_play",
     "combination_len",
+    "dao_contract_address",
     "denom_stable",
     "every_block_time_play",
     "fee_for_drand_worker_in_percentage",
-    "holders_bonus_block_time_end",
     "jackpot_percentage_reward",
     "loterra_cw20_contract_address",
     "loterra_staking_contract_address",
     "lottery_counter",
-    "poll_count",
     "poll_default_end_height",
     "price_per_ticket_to_register",
     "prize_rank_winner_percentage",
-    "safe_lock",
     "terrand_contract_address",
     "token_holder_percentage_fee_reward"
   ],
   "properties": {
-    "admin": {
-      "$ref": "#/definitions/CanonicalAddr"
-    },
     "block_time_play": {
       "type": "integer",
       "format": "uint64",
@@ -35,6 +29,9 @@
       "type": "integer",
       "format": "uint8",
       "minimum": 0.0
+    },
+    "dao_contract_address": {
+      "$ref": "#/definitions/CanonicalAddr"
     },
     "denom_stable": {
       "type": "string"
@@ -49,11 +46,6 @@
       "format": "uint8",
       "minimum": 0.0
     },
-    "holders_bonus_block_time_end": {
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0.0
-    },
     "jackpot_percentage_reward": {
       "type": "integer",
       "format": "uint8",
@@ -66,11 +58,6 @@
       "$ref": "#/definitions/CanonicalAddr"
     },
     "lottery_counter": {
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0.0
-    },
-    "poll_count": {
       "type": "integer",
       "format": "uint64",
       "minimum": 0.0
@@ -90,9 +77,6 @@
         "format": "uint8",
         "minimum": 0.0
       }
-    },
-    "safe_lock": {
-      "type": "boolean"
     },
     "terrand_contract_address": {
       "$ref": "#/definitions/CanonicalAddr"

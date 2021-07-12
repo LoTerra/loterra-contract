@@ -1,7 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{CanonicalAddr, Deps, Order, StdResult, Storage, Uint128, Binary};
+use cosmwasm_std::{CanonicalAddr, Deps, Order, StdResult, Storage, Uint128};
 use cw_storage_plus::{Item, Map};
 use std::ops::Add;
 
