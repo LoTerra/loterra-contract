@@ -628,32 +628,32 @@ pub fn handle_present_proposal(
         }
         Proposal::PollSurvey => {}
         _ => {
-            return Err(StdError::generic_err("Proposal not funds"));
+            // Give back a response to DAO contract
+            return Ok(Response {
+                submessages: vec![],
+                messages: vec![],
+                data: None,
+                attributes: vec![
+                    attr("action", "apply poll"),
+                    attr("proposal", poll.proposal),
+                    attr("applied", false),
+                    attr("poll_id", poll_id),
+                ],
+            });
         }
     }
 
-    // Give back a response to DAO contract
-    /*
-        POLL.update(deps.storage, &poll_id.to_be_bytes(), |poll| match poll {
-            None => Err(StdError::generic_err("Not found")),
-            Some(poll_info) => {
-                let mut poll = poll_info;
-                poll.status = PollStatus::Passed;
-                Ok(poll)
-            }
-        })?;
-    */
-
     store_state(deps.storage, &state)?;
 
+    // Give back a response to DAO contract
     Ok(Response {
         submessages: vec![],
         messages: msgs,
         data: None,
         attributes: vec![
-            attr("action", "present poll"),
+            attr("action", "apply poll"),
             attr("proposal", poll.proposal),
-            attr("result", "success"),
+            attr("applied", true),
             attr("poll_id", poll_id),
         ],
     })
