@@ -2,7 +2,7 @@ use crate::state::{PollStatus, State, WinnerRewardClaims};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{Uint128, Addr};
+use cosmwasm_std::{Uint128, Addr, Binary};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
@@ -72,6 +72,26 @@ pub enum DaoQueryMsg {
     /// Query poll
     GetPoll { poll_id: u64 },
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub enum Proposal {
+    LotteryEveryBlockTime,
+    HolderFeePercentage,
+    DrandWorkerFeePercentage,
+    PrizesPerRanks,
+    JackpotRewardPercentage,
+    AmountToRegister,
+    SecurityMigration,
+    DaoFunding,
+    StakingContractMigration,
+    PollSurvey,
+}
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct Migration {
+    pub contract_addr: String,
+    pub new_code_id: u64,
+    pub msg: Binary,
+}
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct GetPollResponse {
     pub creator: Addr,
@@ -89,7 +109,10 @@ pub struct GetPollResponse {
     pub proposal: Proposal,
     pub migration: Option<Migration>,
     pub collateral: Uint128,
+    pub contract_address: Addr,
+    pub applied: bool,
 }
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct AllCombinationResponse {
     pub combination: Vec<String>,

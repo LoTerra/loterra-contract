@@ -177,24 +177,3 @@ pub fn all_winners(
         })
         .collect()
 }
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub enum Proposal {
-    LotteryEveryBlockTime,
-    HolderFeePercentage,
-    DrandWorkerFeePercentage,
-    PrizesPerRanks,
-    JackpotRewardPercentage,
-    AmountToRegister,
-    SecurityMigration,
-    DaoFunding,
-    StakingContractMigration,
-    PollSurvey
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct Migration {
-    pub contract_addr: String,
-    pub new_code_id: u64,
-    pub msg: Binary,
-}

@@ -1,6 +1,6 @@
 use crate::helpers::{count_match, is_lower_hex};
-use crate::msg::{AllCombinationResponse, AllWinnersResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg, RoundResponse, WinnerResponse, DaoQueryMsg, GetPollResponse};
-use crate::state::{all_winners, combination_save, read_state, save_winner, store_state, PollStatus, Proposal, State, ALL_USER_COMBINATION, COUNT_PLAYERS, COUNT_TICKETS, JACKPOT, PREFIXED_RANK, PREFIXED_USER_COMBINATION, PREFIXED_WINNER, STATE, WINNING_COMBINATION, Migration};
+use crate::msg::{AllCombinationResponse, AllWinnersResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg, RoundResponse, WinnerResponse, DaoQueryMsg, GetPollResponse, Proposal, Migration};
+use crate::state::{all_winners, combination_save, read_state, save_winner, store_state, PollStatus, State, ALL_USER_COMBINATION, COUNT_PLAYERS, COUNT_TICKETS, JACKPOT, PREFIXED_RANK, PREFIXED_USER_COMBINATION, PREFIXED_WINNER, STATE, WINNING_COMBINATION};
 use crate::taxation::deduct_tax;
 use cosmwasm_std::{
     attr, entry_point, to_binary, Addr, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Deps,
@@ -537,7 +537,7 @@ pub fn handle_present_proposal(
     // Load storage
     let mut state = read_state(deps.storage)?;
     // Only Dao contract can call this message
-    if info.sender != state.dao_contract_address {
+    if info.sender != deps.api.addr_humanize(&state.dao_contract_address)? {
         return Err(StdError::generic_err("Unauthorized"));
     }
 
@@ -568,7 +568,7 @@ pub fn handle_present_proposal(
             state.token_holder_percentage_fee_reward = poll.amount.u128() as u8
         }
         Proposal::SecurityMigration => {
-            let migration: Migration = poll.migration?;
+            let migration: Migration = poll.migration.unwrap();
 
             let migrate = WasmMsg::Migrate {
                 contract_addr: migration.contract_addr,
@@ -579,9 +579,10 @@ pub fn handle_present_proposal(
             msgs.push(migrate.into())
         }
         Proposal::DaoFunding => {
+
             let recipient = match poll.recipient {
-                None => &poll.creator.to_string(),
-                Some(address) => Addr::unchecked(address),
+                None => poll.creator.to_string(),
+                Some(address) => address,
             };
 
             // Get the contract balance prepare the tx
@@ -635,7 +636,6 @@ pub fn handle_present_proposal(
                 data: None,
                 attributes: vec![
                     attr("action", "apply poll"),
-                    attr("proposal", poll.proposal),
                     attr("applied", false),
                     attr("poll_id", poll_id),
                 ],
@@ -652,7 +652,6 @@ pub fn handle_present_proposal(
         data: None,
         attributes: vec![
             attr("action", "apply poll"),
-            attr("proposal", poll.proposal),
             attr("applied", true),
             attr("poll_id", poll_id),
         ],
@@ -1051,36 +1050,6 @@ mod tests {
         use cosmwasm_std::from_binary;
 
         #[test]
-        fn security_active() {
-            let before_all = before_all();
-            let mut deps = mock_dependencies(&[]);
-            default_init(deps.as_mut());
-
-            let mut state = read_state(deps.as_ref().storage).unwrap();
-            state.safe_lock = true;
-            store_state(deps.as_mut().storage, &state).unwrap();
-            let msg = ExecuteMsg::Register {
-                address: None,
-                combination: vec!["1e3fab".to_string()],
-            };
-            let res = execute(
-                deps.as_mut(),
-                mock_env(),
-                mock_info(
-                    before_all.default_sender.as_str(),
-                    &[Coin {
-                        denom: "ust".to_string(),
-                        amount: Uint128(1_000_000),
-                    }],
-                ),
-                msg,
-            );
-            match res {
-                Err(StdError::GenericErr { msg, .. }) => assert_eq!(msg, "Deactivated"),
-                _ => panic!("Unexpected error"),
-            }
-        }
-        #[test]
         fn register_success() {
             let before_all = before_all();
             let mut deps = mock_dependencies(&[]);
@@ -1477,22 +1446,6 @@ mod tests {
         use cosmwasm_std::{CosmosMsg, Uint64};
 
         #[test]
-        fn security_active() {
-            let before_all = before_all();
-            let mut deps = mock_dependencies(&[]);
-            default_init(deps.as_mut());
-            let mut state = read_state(deps.as_ref().storage).unwrap();
-            state.safe_lock = true;
-            store_state(deps.as_mut().storage, &state).unwrap();
-
-            let info = mock_info(before_all.default_sender.as_str(), &[]);
-            let res = handle_play(deps.as_mut(), mock_env(), info);
-            match res {
-                Err(StdError::GenericErr { msg, .. }) => assert_eq!(msg, "Deactivated"),
-                _ => panic!("Unexpected error"),
-            }
-        }
-        #[test]
         fn not_allowed_registration_in_progress() {
             let before_all = before_all();
             let mut deps = mock_dependencies(&[Coin {
@@ -1859,31 +1812,6 @@ mod tests {
         use super::*;
         use cosmwasm_std::CosmosMsg;
 
-        #[test]
-        fn security_active() {
-            let before_all = before_all();
-            let mut deps = mock_dependencies(&[]);
-            default_init(deps.as_mut());
-            let mut state = read_state(deps.as_ref().storage).unwrap();
-            JACKPOT
-                .save(
-                    deps.as_mut().storage,
-                    &(state.lottery_counter - 1).to_be_bytes(),
-                    &Uint128::zero(),
-                )
-                .unwrap();
-            state.safe_lock = true;
-            store_state(deps.as_mut().storage, &state).unwrap();
-
-            let env = mock_env();
-            let info = mock_info(before_all.default_sender.as_str().clone(), &[]);
-            let msg = ExecuteMsg::Collect { address: None };
-            let res = execute(deps.as_mut(), env, info, msg);
-            match res {
-                Err(StdError::GenericErr { msg, .. }) => assert_eq!(msg, "Deactivated"),
-                _ => panic!("Unexpected error"),
-            }
-        }
         #[test]
         fn do_not_send_funds() {
             let before_all = before_all();
@@ -2471,182 +2399,6 @@ mod tests {
         use super::*;
         use cosmwasm_std::CosmosMsg;
 
-        // handle_present
-        fn create_poll(deps: DepsMut) {
-            let msg = ExecuteMsg::Poll {
-                description: "This is my first proposal".to_string(),
-                proposal: Proposal::LotteryEveryBlockTime,
-                amount: Some(Uint128(22)),
-                prize_per_rank: None,
-                recipient: None,
-            };
-            let _res = execute(deps, mock_env(), mock_info("addr0000", &[]), msg).unwrap();
-        }
-        fn create_poll_security_migration(deps: DepsMut) {
-            let msg = ExecuteMsg::Poll {
-                description: "This is my first proposal".to_string(),
-                proposal: Proposal::SecurityMigration,
-                amount: None,
-                prize_per_rank: None,
-                recipient: Some("newAddress".to_string()),
-            };
-            let _res = execute(deps, mock_env(), mock_info("addr0002", &[]), msg).unwrap();
-            println!("{:?}", _res);
-        }
-        fn create_poll_dao_funding(deps: DepsMut) {
-            let msg = ExecuteMsg::Poll {
-                description: "This is my first proposal".to_string(),
-                proposal: Proposal::DaoFunding,
-                amount: Some(Uint128(22)),
-                prize_per_rank: None,
-                recipient: None,
-            };
-            let _res = execute(deps, mock_env(), mock_info("addr0002", &[]), msg).unwrap();
-        }
-        fn create_poll_statking_contract_migration(deps: DepsMut) {
-            let msg = ExecuteMsg::Poll {
-                description: "This is my first proposal".to_string(),
-                proposal: Proposal::StakingContractMigration,
-                amount: None,
-                prize_per_rank: None,
-                recipient: Some("newAddress".to_string()),
-            };
-            let _res = execute(deps, mock_env(), mock_info("addr0002", &[]), msg).unwrap();
-            println!("{:?}", _res);
-        }
-        #[test]
-        fn do_not_send_funds() {
-            let before_all = before_all();
-            let mut deps = mock_dependencies(&[Coin {
-                denom: "ust".to_string(),
-                amount: Uint128(9_000_000),
-            }]);
-            default_init(deps.as_mut());
-            create_poll(deps.as_mut());
-
-            let env = mock_env();
-            let info = mock_info(
-                before_all.default_sender.as_str().clone(),
-                &[Coin {
-                    denom: "ust".to_string(),
-                    amount: Uint128(9_000_000),
-                }],
-            );
-            let msg = ExecuteMsg::PresentPoll { poll_id: 1 };
-            let res = execute(deps.as_mut(), env, info, msg);
-            println!("{:?}", res);
-            match res {
-                Err(StdError::GenericErr { msg, .. }) => {
-                    assert_eq!(msg, "Do not send funds with present proposal")
-                }
-                _ => panic!("Unexpected error"),
-            }
-        }
-        #[test]
-        fn poll_expired() {
-            let before_all = before_all();
-            let mut deps = mock_dependencies(&[Coin {
-                denom: "ust".to_string(),
-                amount: Uint128(9_000_000),
-            }]);
-            default_init(deps.as_mut());
-            create_poll(deps.as_mut());
-            // Save to storage
-
-            POLL.update(
-                deps.as_mut().storage,
-                &1_u64.to_be_bytes(),
-                |poll| -> StdResult<PollInfoState> {
-                    match poll {
-                        None => panic!("Unexpected error"),
-                        Some(poll_state) => {
-                            let mut poll_data = poll_state;
-                            // Update the status to passed
-                            poll_data.status = PollStatus::Rejected;
-                            Ok(poll_data)
-                        }
-                    }
-                },
-            )
-            .unwrap();
-            let env = mock_env();
-            let info = mock_info(before_all.default_sender.as_str().clone(), &[]);
-            let msg = ExecuteMsg::PresentPoll { poll_id: 1 };
-            let res = execute(deps.as_mut(), env, info, msg);
-            println!("{:?}", res);
-            match res {
-                Err(StdError::GenericErr { msg, .. }) => {
-                    assert_eq!(msg, "Unauthorized")
-                }
-                _ => panic!("Unexpected error"),
-            }
-        }
-        #[test]
-        fn poll_still_in_progress() {
-            let before_all = before_all();
-            let mut deps = mock_dependencies_custom(&[Coin {
-                denom: "ust".to_string(),
-                amount: Uint128(9_000_000),
-            }]);
-            default_init(deps.as_mut());
-            create_poll(deps.as_mut());
-
-            let env = mock_env();
-            let info = mock_info(before_all.default_sender.as_str().clone(), &[]);
-            let msg = ExecuteMsg::PresentPoll { poll_id: 1 };
-            POLL.update(
-                deps.as_mut().storage,
-                &1_u64.to_be_bytes(),
-                |poll| -> StdResult<PollInfoState> {
-                    match poll {
-                        None => panic!("Unexpected error"),
-                        Some(poll_state) => {
-                            let mut poll_data = poll_state;
-                            // Update the status to passed
-                            poll_data.end_height = env.block.height + 1;
-                            Ok(poll_data)
-                        }
-                    }
-                },
-            )
-            .unwrap();
-            let res = execute(deps.as_mut(), env, info, msg);
-            println!("{:?}", res);
-            match res {
-                Err(StdError::GenericErr { msg, .. }) => {
-                    assert_eq!(msg, "Proposal still in progress")
-                }
-                _ => panic!("Unexpected error"),
-            }
-        }
-        #[test]
-        fn success_with_reject() {
-            let before_all = before_all();
-            let mut deps = mock_dependencies_custom(&[Coin {
-                denom: "ust".to_string(),
-                amount: Uint128(9_000_000),
-            }]);
-            deps.querier.with_token_balances(Uint128(200_000));
-            default_init(deps.as_mut());
-            create_poll(deps.as_mut());
-
-            let mut env = mock_env();
-            let info = mock_info(before_all.default_sender.as_str().clone(), &[]);
-            let poll_state = POLL
-                .load(deps.as_ref().storage, &1_u64.to_be_bytes())
-                .unwrap();
-            env.block.height = poll_state.end_height + 1;
-
-            let msg = ExecuteMsg::PresentPoll { poll_id: 1 };
-            let res = execute(deps.as_mut(), env, info, msg).unwrap();
-            assert_eq!(res.attributes.len(), 3);
-            assert_eq!(res.messages.len(), 0);
-
-            let poll_state = POLL
-                .load(deps.as_ref().storage, &1_u64.to_be_bytes())
-                .unwrap();
-            assert_eq!(poll_state.status, PollStatus::Rejected);
-        }
         #[test]
         fn success_dao_funding() {
             let before_all = before_all();
@@ -2663,32 +2415,10 @@ mod tests {
             );
 
             default_init(deps.as_mut());
-            // with admin renounce
-            let env = mock_env();
-            let info = mock_info(before_all.default_sender_owner.as_str().clone(), &[]);
-            let res = handle_renounce(deps.as_mut(), env, info);
-
-            let env = mock_env();
-            let info = mock_info(before_all.default_sender.as_str().clone(), &[]);
-            create_poll_dao_funding(deps.as_mut());
-
-            let env = mock_env();
-            let info = mock_info(before_all.default_sender.as_str().clone(), &[]);
-            let msg = ExecuteMsg::Vote {
-                poll_id: 1,
-                approve: true,
-            };
-
-            let _res = execute(deps.as_mut(), env, info, msg);
 
             let mut env = mock_env();
             let info = mock_info(before_all.default_sender.as_str().clone(), &[]);
-            let poll_state = POLL
-                .load(deps.as_ref().storage, &1_u64.to_be_bytes())
-                .unwrap();
-            env.block.height = poll_state.end_height + 1;
             let state_before = read_state(deps.as_ref().storage).unwrap();
-
             let msg = ExecuteMsg::PresentPoll { poll_id: 1 };
             let res = execute(deps.as_mut(), env, info, msg).unwrap();
             println!("{:?}", res);
@@ -2709,10 +2439,6 @@ mod tests {
                 })
             );
 
-            let poll_state = POLL
-                .load(deps.as_ref().storage, &1_u64.to_be_bytes())
-                .unwrap();
-            assert_eq!(poll_state.status, PollStatus::Passed);
         }
         #[test]
         fn success_staking_migration() {
@@ -2729,37 +2455,16 @@ mod tests {
                 Decimal::zero(),
             );
             default_init(deps.as_mut());
-            let env = mock_env();
-            let info = mock_info(before_all.default_sender_owner.as_str().clone(), &[]);
-            create_poll_statking_contract_migration(deps.as_mut());
 
-            let env = mock_env();
-            let info = mock_info(before_all.default_sender.as_str().clone(), &[]);
-            let msg = ExecuteMsg::Vote {
-                poll_id: 1,
-                approve: true,
-            };
-
-            let _res = execute(deps.as_mut(), env, info, msg);
-
+            let state_before = read_state(deps.as_ref().storage).unwrap();
             let mut env = mock_env();
             let info = mock_info(before_all.default_sender.as_str().clone(), &[]);
-            let poll_state = POLL
-                .load(deps.as_ref().storage, &1_u64.to_be_bytes())
-                .unwrap();
-            env.block.height = poll_state.end_height + 1;
-            let state_before = read_state(deps.as_ref().storage).unwrap();
-
             let msg = ExecuteMsg::PresentPoll { poll_id: 1 };
             let res = execute(deps.as_mut(), env, info, msg).unwrap();
             println!("{:?}", res);
             assert_eq!(res.attributes.len(), 3);
             assert_eq!(res.messages.len(), 0);
 
-            let poll_state = POLL
-                .load(deps.as_ref().storage, &1_u64.to_be_bytes())
-                .unwrap();
-            assert_eq!(poll_state.status, PollStatus::Passed);
             //let state = config(&mut deps);
             let state_after = read_state(deps.as_ref().storage).unwrap();
             assert_ne!(
@@ -2789,27 +2494,9 @@ mod tests {
                 Decimal::zero(),
             );
             default_init(deps.as_mut());
-            let env = mock_env();
-            let info = mock_info(before_all.default_sender_owner.as_str().clone(), &[]);
-            create_poll_security_migration(deps.as_mut());
-
-            let env = mock_env();
-            let info = mock_info(before_all.default_sender.as_str().clone(), &[]);
-            let msg = ExecuteMsg::Vote {
-                poll_id: 1,
-                approve: true,
-            };
-
-            let _res = execute(deps.as_mut(), env, info, msg);
 
             let mut env = mock_env();
             let info = mock_info(before_all.default_sender.as_str().clone(), &[]);
-            let poll_state = POLL
-                .load(deps.as_ref().storage, &1_u64.to_be_bytes())
-                .unwrap();
-            env.block.height = poll_state.end_height + 1;
-            read_state(deps.as_ref().storage).unwrap();
-
             let msg = ExecuteMsg::PresentPoll { poll_id: 1 };
             let res = execute(deps.as_mut(), env, info, msg);
             println!("{:?}", res);
@@ -2830,143 +2517,25 @@ mod tests {
             );
             default_init(deps.as_mut());
             let env = mock_env();
-            let info = mock_info(before_all.default_sender.as_str().clone(), &[]);
-            create_poll(deps.as_mut());
-
-            let env = mock_env();
-            let info = mock_info(before_all.default_sender.as_str().clone(), &[]);
-            let msg = ExecuteMsg::Vote {
-                poll_id: 1,
-                approve: true,
-            };
-
-            let _res = execute(deps.as_mut(), env, info, msg);
-
-            let mut env = mock_env();
-            let info = mock_info(before_all.default_sender.as_str().clone(), &[]);
-            let poll_state = POLL
-                .load(deps.as_ref().storage, &1_u64.to_be_bytes())
-                .unwrap();
-            env.block.height = poll_state.end_height + 1;
+            // not the Dao address
+            let info = mock_info("other", &[]);
 
             let msg = ExecuteMsg::PresentPoll { poll_id: 1 };
-            let res = execute(deps.as_mut(), env, info, msg).unwrap();
-            assert_eq!(res.attributes.len(), 3);
-            assert_eq!(res.messages.len(), 0);
-
-            let poll_state = POLL
-                .load(deps.as_ref().storage, &1_u64.to_be_bytes())
-                .unwrap();
-            assert_eq!(poll_state.status, PollStatus::Passed);
-
-            let env = mock_env();
-            let info = mock_info(before_all.default_sender.as_str().clone(), &[]);
-            create_poll_security_migration(deps.as_mut());
-            let msg = ExecuteMsg::Vote {
-                poll_id: 2,
-                approve: true,
-            };
-            let res = execute(deps.as_mut(), env, info, msg).unwrap();
-            println!("{:?}", res);
-        }
-        #[test]
-        fn success_with_proposal_not_expired_yet_and_more_50_percent_weight_vote() {
-            let before_all = before_all();
-            let mut deps = mock_dependencies_custom(&[Coin {
-                denom: "ust".to_string(),
-                amount: Uint128(9_000_000),
-            }]);
-            deps.querier.with_token_balances(Uint128(200_000));
-            deps.querier.with_holder(
-                before_all.default_sender.clone(),
-                Uint128(15_000),
-                Decimal::zero(),
-                Decimal::zero(),
-            );
-            default_init(deps.as_mut());
-            let env = mock_env();
-            let info = mock_info(before_all.default_sender.as_str().clone(), &[]);
-            create_poll(deps.as_mut());
-
-            let env = mock_env();
-            let info = mock_info(before_all.default_sender.as_str().clone(), &[]);
-            let msg = ExecuteMsg::Vote {
-                poll_id: 1,
-                approve: true,
-            };
-
-            let _res = execute(deps.as_mut(), env, info, msg);
-
-            let mut env = mock_env();
-            let info = mock_info(before_all.default_sender.as_str().clone(), &[]);
-            let poll_state = POLL
-                .load(deps.as_ref().storage, &1_u64.to_be_bytes())
-                .unwrap();
-            env.block.height = poll_state.end_height - 1000;
-
-            let msg = ExecuteMsg::PresentPoll { poll_id: 1 };
-            let res = execute(deps.as_mut(), env, info, msg).unwrap();
-            assert_eq!(res.attributes.len(), 3);
-            assert_eq!(res.messages.len(), 0);
-
-            let poll_state = POLL
-                .load(deps.as_ref().storage, &1_u64.to_be_bytes())
-                .unwrap();
-            assert_eq!(poll_state.status, PollStatus::Passed);
-
-            let env = mock_env();
-            let info = mock_info(before_all.default_sender.as_str().clone(), &[]);
-            create_poll_security_migration(deps.as_mut());
-            let msg = ExecuteMsg::Vote {
-                poll_id: 2,
-                approve: true,
-            };
-            let res = execute(deps.as_mut(), env, info, msg).unwrap();
-            println!("{:?}", res);
-        }
-        #[test]
-        fn error_with_proposal_not_expired_yet_and_less_50_percent_weight_vote() {
-            let before_all = before_all();
-            let mut deps = mock_dependencies_custom(&[Coin {
-                denom: "ust".to_string(),
-                amount: Uint128(9_000_000),
-            }]);
-            deps.querier.with_token_balances(Uint128(200_000));
-            deps.querier.with_holder(
-                before_all.default_sender.clone(),
-                Uint128(1_000),
-                Decimal::zero(),
-                Decimal::zero(),
-            );
-            default_init(deps.as_mut());
-            let env = mock_env();
-            let info = mock_info(before_all.default_sender.as_str().clone(), &[]);
-            create_poll(deps.as_mut());
-
-            let env = mock_env();
-            let info = mock_info(before_all.default_sender.as_str().clone(), &[]);
-            let msg = ExecuteMsg::Vote {
-                poll_id: 1,
-                approve: true,
-            };
-
-            let _res = execute(deps.as_mut(), env, info, msg);
-
-            let mut env = mock_env();
-            let info = mock_info(before_all.default_sender.as_str().clone(), &[]);
-            let poll_state = POLL
-                .load(deps.as_ref().storage, &1_u64.to_be_bytes())
-                .unwrap();
-            env.block.height = poll_state.end_height - 1000;
-
-            let msg = ExecuteMsg::PresentPoll { poll_id: 1 };
-            let res = execute(deps.as_mut(), env, info, msg);
+            let res = execute(deps.as_mut(), env.clone(), info, msg);
             match res {
-                Err(StdError::GenericErr { msg, .. }) => {
-                    assert_eq!(msg, "Proposal still in progress")
-                }
-                _ => panic!("Unexpected error"),
+                Err(StdError::GenericErr {msg, ..}) => {
+                    assert_eq!(msg, "Unauthorized")
+                },
+                _ => panic!("Do not enter here")
             }
+
+            // With Dao address
+            let info = mock_info("addr0002", &[]);
+            let msg = ExecuteMsg::PresentPoll { poll_id: 1 };
+            let res = execute(deps.as_mut(), env, info, msg).unwrap();
+            print!("{:?}", res);
+
         }
+
     }
 }
