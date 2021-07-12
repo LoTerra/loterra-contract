@@ -1611,7 +1611,7 @@ mod tests {
             // TODO add winner checks
 
             println!("{:?}", jackpot_reward_after);
-            assert_eq!(50, state_after.token_holder_percentage_fee_reward);
+            assert_eq!(20, state_after.token_holder_percentage_fee_reward);
             assert_eq!(jackpot_reward_before, Uint128::zero());
             assert_ne!(jackpot_reward_after, jackpot_reward_before);
             // 720720 total fees
@@ -1692,7 +1692,7 @@ mod tests {
                 .unwrap();
 
             println!("{:?}", jackpot_reward_after);
-            assert_eq!(50, state_after.token_holder_percentage_fee_reward);
+            assert_eq!(20, state_after.token_holder_percentage_fee_reward);
             assert_eq!(jackpot_reward_before, Uint128::zero());
             assert_ne!(jackpot_reward_after, jackpot_reward_before);
             // 720720 total fees
@@ -1752,7 +1752,7 @@ mod tests {
             .unwrap();
 
             let state = read_state(deps.as_ref().storage).unwrap();
-            assert_eq!(50, state.token_holder_percentage_fee_reward);
+            assert_eq!(20, state.token_holder_percentage_fee_reward);
             JACKPOT
                 .save(
                     deps.as_mut().storage,
@@ -2087,7 +2087,7 @@ mod tests {
             let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
             println!("{:?}", res);
             assert_eq!(res.messages.len(), 2);
-            let amount_claimed = Uint128(215346);
+            let amount_claimed = Uint128(344554);
             assert_eq!(
                 res.messages[0],
                 CosmosMsg::Bank(BankMsg::Send {
@@ -2110,7 +2110,7 @@ mod tests {
                     msg: Binary::from(r#"{"update_global_index":{}}"#.as_bytes()),
                     send: vec![Coin {
                         denom: "ust".to_string(),
-                        amount: Uint128(215346)
+                        amount: Uint128(86138)
                     }]
                 })
             );
@@ -2203,7 +2203,7 @@ mod tests {
             println!("{:?}", res);
 
             assert_eq!(res.messages.len(), 2);
-            let amount_claimed = Uint128(215346);
+            let amount_claimed = Uint128(344554);
             assert_eq!(
                 res.messages[0],
                 CosmosMsg::Bank(BankMsg::Send {
@@ -2225,7 +2225,7 @@ mod tests {
                     msg: Binary::from(r#"{"update_global_index":{}}"#.as_bytes()),
                     send: vec![Coin {
                         denom: "ust".to_string(),
-                        amount: Uint128(215346)
+                        amount: Uint128(86138)
                     }]
                 })
             );
@@ -2322,7 +2322,7 @@ mod tests {
             let msg = ExecuteMsg::Collect { address: None };
             let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
             assert_eq!(res.messages.len(), 2);
-            let amount_claimed = Uint128(248349);
+            let amount_claimed = Uint128(397359);
             assert_eq!(
                 res.messages[0],
                 CosmosMsg::Bank(BankMsg::Send {
@@ -2344,7 +2344,7 @@ mod tests {
                     msg: Binary::from(r#"{"update_global_index":{}}"#.as_bytes()),
                     send: vec![Coin {
                         denom: "ust".to_string(),
-                        amount: Uint128(248349)
+                        amount: Uint128(99339)
                     }]
                 })
             );
@@ -2417,7 +2417,7 @@ mod tests {
             default_init(deps.as_mut());
 
             let mut env = mock_env();
-            let info = mock_info(before_all.default_sender.as_str().clone(), &[]);
+            let info = mock_info("addr0002", &[]);
             let state_before = read_state(deps.as_ref().storage).unwrap();
             let msg = ExecuteMsg::PresentPoll { poll_id: 1 };
             let res = execute(deps.as_mut(), env, info, msg).unwrap();
@@ -2458,7 +2458,7 @@ mod tests {
 
             let state_before = read_state(deps.as_ref().storage).unwrap();
             let mut env = mock_env();
-            let info = mock_info(before_all.default_sender.as_str().clone(), &[]);
+            let info = mock_info("addr0002", &[]);
             let msg = ExecuteMsg::PresentPoll { poll_id: 1 };
             let res = execute(deps.as_mut(), env, info, msg).unwrap();
             println!("{:?}", res);

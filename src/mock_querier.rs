@@ -169,7 +169,7 @@ impl WasmMockQuerier {
                 }
                 else if msg == &Binary::from(r#"{"GetPoll":{"poll_id":1}}"#.as_bytes()) {
                     let msg = GetPollResponse {
-                        creator: Addr::unchecked("ok"),
+                        creator: Addr::unchecked("addr0002"),
                         status: PollStatus::Passed,
                         end_height: 0,
                         start_height: 0,
@@ -180,7 +180,7 @@ impl WasmMockQuerier {
                         no_vote: 0,
                         amount: Uint128(200),
                         prizes_per_ranks: vec![],
-                        proposal: Proposal::LotteryEveryBlockTime,
+                        proposal: Proposal::DaoFunding,
                         recipient: None,
                         migration: None,
                         collateral: Default::default(),
