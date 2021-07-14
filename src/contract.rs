@@ -4126,7 +4126,7 @@ mod tests {
                     amount: Uint128(9_000_000),
                 }],
             );
-            deps.querier.with_token_balances(Uint128(200_000));
+            deps.querier.with_token_balances(Uint128(1_200_000_000));
             deps.querier.with_holder(
                 before_all.default_sender.clone(),
                 Uint128(15_000),
