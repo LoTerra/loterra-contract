@@ -343,6 +343,18 @@
           "type": "object"
         }
       }
+    },
+    {
+      "description": "Query staking contract",
+      "type": "object",
+      "required": [
+        "state"
+      ],
+      "properties": {
+        "state": {
+          "type": "object"
+        }
+      }
     }
   ],
   "definitions": {

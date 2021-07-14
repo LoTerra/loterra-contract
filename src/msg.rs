@@ -94,7 +94,7 @@ pub enum QueryMsg {
     /// Update balance of the staking contract with rewards
     UpdateGlobalIndex {},
     /// Query staking contract
-    State{}
+    State {},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
