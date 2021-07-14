@@ -2,7 +2,7 @@ use crate::state::{PollStatus, Proposal, State, WinnerRewardClaims};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{HumanAddr, Uint128};
+use cosmwasm_std::{HumanAddr, Uint128, Decimal};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InitMsg {
@@ -93,6 +93,17 @@ pub enum QueryMsg {
     },
     /// Update balance of the staking contract with rewards
     UpdateGlobalIndex {},
+}
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub enum LoterraStaking {
+    // Get Holder from loterra staking contract
+    State {},
+}
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct StakingStateResponse {
+    pub global_index: Decimal,
+    pub total_balance: Uint128,
+    pub prev_reward_balance: Uint128,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
