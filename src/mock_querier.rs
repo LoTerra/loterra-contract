@@ -178,7 +178,7 @@ impl WasmMockQuerier {
                             pending_rewards: self.holder_response.pending_rewards,
                         };
                         return Ok(to_binary(&msg_balance));
-                    } else if msg == &Binary::from(r#"{"State":{}}"#.as_bytes()) {
+                    } else if msg == &Binary::from(r#"{"state":{}}"#.as_bytes()) {
                         let msg_balance = StakingStateResponse {
                             global_index: Decimal::percent(2),
                             total_balance: Uint128(1_000_000_000),

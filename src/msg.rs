@@ -93,12 +93,10 @@ pub enum QueryMsg {
     },
     /// Update balance of the staking contract with rewards
     UpdateGlobalIndex {},
+    /// Query staking contract
+    State{}
 }
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub enum LoterraStaking {
-    // Get Holder from loterra staking contract
-    State {},
-}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct StakingStateResponse {
     pub global_index: Decimal,
