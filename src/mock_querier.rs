@@ -6,6 +6,7 @@ use cosmwasm_std::{
 };
 use serde::Serialize;
 use terra_cosmwasm::{TaxCapResponse, TaxRateResponse, TerraQuery, TerraQueryWrapper, TerraRoute};
+use crate::msg::StakingStateResponse;
 
 pub fn mock_dependencies_custom(
     canonical_length: usize,
@@ -175,6 +176,13 @@ impl WasmMockQuerier {
                             balance: self.holder_response.balance,
                             index: self.holder_response.index,
                             pending_rewards: self.holder_response.pending_rewards,
+                        };
+                        return Ok(to_binary(&msg_balance));
+                    }else if msg == &Binary::from(r#"{"State":{}}"#.as_bytes()) {
+                        let msg_balance = StakingStateResponse {
+                            global_index: Decimal::percent(2),
+                            total_balance: Uint128(1_000_000_000),
+                            prev_reward_balance: Uint128(1_000_000_000),
                         };
                         return Ok(to_binary(&msg_balance));
                     }
