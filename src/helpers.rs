@@ -1,7 +1,5 @@
-use crate::msg::{QueryMsg, StakingStateResponse, LoterraStaking};
-use crate::query::{
-    GetHolderResponse, GetHoldersResponse, LoterraBalanceResponse, TerrandResponse,
-};
+use crate::msg::{LoterraStaking, QueryMsg, StakingStateResponse};
+use crate::query::{GetHolderResponse, LoterraBalanceResponse, TerrandResponse};
 use crate::state::{poll_storage, PollStatus, State};
 use cosmwasm_std::{
     to_binary, Api, CanonicalAddr, Coin, CosmosMsg, Empty, Extern, HandleResponse, HumanAddr,
@@ -65,21 +63,12 @@ pub fn wrapper_msg_loterra_staking<S: Storage, A: Api, Q: Querier>(
 
     Ok(res)
 }
-pub fn wrapper_msg_loterra_all_staking<S: Storage, A: Api, Q: Querier>(
-    deps: &Extern<S, A, Q>,
-    query: QueryRequest<Empty>,
-) -> StdResult<GetHoldersResponse> {
-    let res: GetHoldersResponse = deps.querier.query(&query)?;
-
-    Ok(res)
-}
 
 pub fn user_total_weight<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     state: &State,
     address: &CanonicalAddr,
 ) -> Uint128 {
-
     let mut weight = Uint128::zero();
     let human_address = deps.api.human_address(&address).unwrap();
 
@@ -106,8 +95,15 @@ pub fn total_weight<S: Storage, A: Api, Q: Querier>(
     state: &State,
 ) -> Uint128 {
     let msg = LoterraStaking::State {};
-    let loterra_human = deps.api.human_address(&state.loterra_staking_contract_address.clone()).unwrap();
-    let query = WasmQuery::Smart { contract_addr: loterra_human, msg: to_binary(&msg).unwrap()}.into();
+    let loterra_human = deps
+        .api
+        .human_address(&state.loterra_staking_contract_address.clone())
+        .unwrap();
+    let query = WasmQuery::Smart {
+        contract_addr: loterra_human,
+        msg: to_binary(&msg).unwrap(),
+    }
+    .into();
     let loterra_balance: StakingStateResponse = deps.querier.query(&query).unwrap();
     loterra_balance.total_balance
 }
