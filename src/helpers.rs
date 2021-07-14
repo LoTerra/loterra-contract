@@ -107,7 +107,7 @@ pub fn total_weight<S: Storage, A: Api, Q: Querier>(
 ) -> Uint128 {
     let msg = LoterraStaking::State {};
     let loterra_human = deps.api.human_address(&state.loterra_staking_contract_address.clone()).unwrap();
-    let query = WasmQuery::Smart { contract_addr: loterra_human.to_string(), msg: to_binary(&msg).unwrap()}.into();
+    let query = WasmQuery::Smart { contract_addr: loterra_human, msg: to_binary(&msg).unwrap()}.into();
     let loterra_balance: StakingStateResponse = deps.querier.query(&query).unwrap();
     loterra_balance.total_balance
 }
