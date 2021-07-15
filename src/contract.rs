@@ -1,6 +1,13 @@
 use crate::helpers::{count_match, is_lower_hex};
-use crate::msg::{AllCombinationResponse, AllWinnersResponse, ConfigResponse, ExecuteMsg, InstantiateMsg, QueryMsg, RoundResponse, WinnerResponse, DaoQueryMsg, GetPollResponse, Proposal, Migration};
-use crate::state::{all_winners, combination_save, read_state, save_winner, store_state, State, ALL_USER_COMBINATION, COUNT_PLAYERS, COUNT_TICKETS, JACKPOT, PREFIXED_RANK, PREFIXED_USER_COMBINATION, PREFIXED_WINNER, STATE, WINNING_COMBINATION};
+use crate::msg::{
+    AllCombinationResponse, AllWinnersResponse, ConfigResponse, DaoQueryMsg, ExecuteMsg,
+    GetPollResponse, InstantiateMsg, Migration, Proposal, QueryMsg, RoundResponse, WinnerResponse,
+};
+use crate::state::{
+    all_winners, combination_save, read_state, save_winner, store_state, State,
+    ALL_USER_COMBINATION, COUNT_PLAYERS, COUNT_TICKETS, JACKPOT, PREFIXED_RANK,
+    PREFIXED_USER_COMBINATION, PREFIXED_WINNER, STATE, WINNING_COMBINATION,
+};
 use crate::taxation::deduct_tax;
 use cosmwasm_std::{
     attr, entry_point, to_binary, Addr, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Deps,
@@ -8,7 +15,7 @@ use cosmwasm_std::{
     WasmQuery,
 };
 use cw20::{BalanceResponse, Cw20ExecuteMsg, Cw20QueryMsg};
-use std::ops::{Mul};
+use std::ops::Mul;
 
 const DRAND_GENESIS_TIME: u64 = 1595431050;
 const DRAND_PERIOD: u64 = 30;
@@ -537,9 +544,14 @@ pub fn handle_present_proposal(
     }
 
     let msg = DaoQueryMsg::GetPoll { poll_id };
-    let execute_query = WasmQuery::Smart { contract_addr: deps.api.addr_humanize( &state.dao_contract_address)?.to_string(), msg: to_binary(&msg)? };
+    let execute_query = WasmQuery::Smart {
+        contract_addr: deps
+            .api
+            .addr_humanize(&state.dao_contract_address)?
+            .to_string(),
+        msg: to_binary(&msg)?,
+    };
     let poll: GetPollResponse = deps.querier.query(&execute_query.into())?;
-
 
     let mut msgs = vec![];
     // Valid the proposal
@@ -568,13 +580,12 @@ pub fn handle_present_proposal(
             let migrate = WasmMsg::Migrate {
                 contract_addr: migration.contract_addr,
                 new_code_id: migration.new_code_id,
-                msg: migration.msg
+                msg: migration.msg,
             };
 
             msgs.push(migrate.into())
         }
         Proposal::DaoFunding => {
-
             let recipient = match poll.recipient {
                 None => poll.creator.to_string(),
                 Some(address) => address,
@@ -598,7 +609,7 @@ pub fn handle_present_proposal(
 
             if loterra_balance.balance.u128() < poll.amount.u128() {
                 // Reject the proposal on DAO contract ?
-                return Err(StdError::generic_err("error not enough funds"))
+                return Err(StdError::generic_err("error not enough funds"));
                 //return reject_proposal(deps.storage, poll_id);
             }
             let msg_transfer = Cw20ExecuteMsg::Transfer {
@@ -618,13 +629,13 @@ pub fn handle_present_proposal(
             msgs.push(res_transfer.into())
         }
         Proposal::StakingContractMigration => {
-            state.loterra_staking_contract_address = deps
-                .api
-                .addr_canonicalize(&poll.recipient.unwrap())?;
+            state.loterra_staking_contract_address =
+                deps.api.addr_canonicalize(&poll.recipient.unwrap())?;
         }
         Proposal::PollSurvey => {}
         _ =>
-            // Give back a response to DAO contract
+        // Give back a response to DAO contract
+        {
             return Ok(Response {
                 submessages: vec![],
                 messages: vec![],
@@ -634,8 +645,8 @@ pub fn handle_present_proposal(
                     attr("applied", false),
                     attr("poll_id", poll_id),
                 ],
-            }),
-
+            })
+        }
     }
 
     store_state(deps.storage, &state)?;
@@ -2426,50 +2437,10 @@ mod tests {
                         .unwrap()
                         .to_string(),
                     msg: Binary::from(
-                        r#"{"transfer":{"recipient":"addr0002","amount":"22"}}"#.as_bytes()
+                        r#"{"transfer":{"recipient":"addr0002","amount":"200"}}"#.as_bytes()
                     ),
                     send: vec![]
                 })
-            );
-
-        }
-        #[test]
-        fn success_staking_migration() {
-            let before_all = before_all();
-            let mut deps = mock_dependencies_custom(&[Coin {
-                denom: "ust".to_string(),
-                amount: Uint128(9_000_000),
-            }]);
-            deps.querier.with_token_balances(Uint128(200_000));
-            deps.querier.with_holder(
-                before_all.default_sender.clone(),
-                Uint128(150_000),
-                Decimal::zero(),
-                Decimal::zero(),
-            );
-            default_init(deps.as_mut());
-
-            let state_before = read_state(deps.as_ref().storage).unwrap();
-            let mut env = mock_env();
-            let info = mock_info("addr0002", &[]);
-            let msg = ExecuteMsg::PresentPoll { poll_id: 1 };
-            let res = execute(deps.as_mut(), env, info, msg).unwrap();
-            println!("{:?}", res);
-            assert_eq!(res.attributes.len(), 3);
-            assert_eq!(res.messages.len(), 0);
-
-            //let state = config(&mut deps);
-            let state_after = read_state(deps.as_ref().storage).unwrap();
-            assert_ne!(
-                state_after.loterra_staking_contract_address,
-                state_before.loterra_staking_contract_address
-            );
-            assert_eq!(
-                deps.api
-                    .addr_humanize(&state_after.loterra_staking_contract_address)
-                    .unwrap()
-                    .to_string(),
-                "newAddress".to_string()
             );
         }
         #[test]
@@ -2516,10 +2487,10 @@ mod tests {
             let msg = ExecuteMsg::PresentPoll { poll_id: 1 };
             let res = execute(deps.as_mut(), env.clone(), info, msg);
             match res {
-                Err(StdError::GenericErr {msg, ..}) => {
+                Err(StdError::GenericErr { msg, .. }) => {
                     assert_eq!(msg, "Unauthorized")
-                },
-                _ => panic!("Do not enter here")
+                }
+                _ => panic!("Do not enter here"),
             }
 
             // With Dao address
@@ -2527,8 +2498,6 @@ mod tests {
             let msg = ExecuteMsg::PresentPoll { poll_id: 1 };
             let res = execute(deps.as_mut(), env, info, msg).unwrap();
             print!("{:?}", res);
-
         }
-
     }
 }

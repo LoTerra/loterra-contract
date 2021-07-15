@@ -1,10 +1,13 @@
+use crate::msg::{GetPollResponse, Proposal};
 use crate::query::{GetHoldersResponse, HoldersInfo};
+use crate::state::PollStatus;
 use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage, MOCK_CONTRACT_ADDR};
-use cosmwasm_std::{from_slice, to_binary, Binary, Coin, ContractResult, Decimal, OwnedDeps, Querier, QuerierResult, QueryRequest, SystemError, SystemResult, Uint128, WasmQuery, Addr};
+use cosmwasm_std::{
+    from_slice, to_binary, Addr, Binary, Coin, ContractResult, Decimal, OwnedDeps, Querier,
+    QuerierResult, QueryRequest, SystemError, SystemResult, Uint128, WasmQuery,
+};
 use serde::Serialize;
 use terra_cosmwasm::{TaxCapResponse, TaxRateResponse, TerraQuery, TerraQueryWrapper};
-use crate::state::PollStatus;
-use crate::msg::{Proposal, GetPollResponse};
 
 pub fn mock_dependencies_custom(
     contract_balance: &[Coin],
@@ -165,9 +168,7 @@ impl WasmMockQuerier {
                         };
                         return SystemResult::Ok(ContractResult::from(to_binary(&msg_balance)));
                     }
-
-                }
-                else if msg == &Binary::from(r#"{"GetPoll":{"poll_id":1}}"#.as_bytes()) {
+                } else if msg == &Binary::from(r#"{"GetPoll":{"poll_id":1}}"#.as_bytes()) {
                     let msg = GetPollResponse {
                         creator: Addr::unchecked("addr0002"),
                         status: PollStatus::Passed,
@@ -185,7 +186,7 @@ impl WasmMockQuerier {
                         migration: None,
                         collateral: Default::default(),
                         applied: false,
-                        contract_address: Addr::unchecked("ok")
+                        contract_address: Addr::unchecked("ok"),
                     };
                     return SystemResult::Ok(ContractResult::from(to_binary(&msg)));
                 }
