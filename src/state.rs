@@ -46,6 +46,14 @@ pub struct WinnerRewardClaims {
     pub ranks: Vec<u8>,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct DrawOwnState {
+    pub jackpot_percentage_reward: u8,
+    pub token_holder_percentage_fee_reward: u8,
+    pub prize_rank_winner_percentage: Vec<u8>,
+    pub price_per_ticket_to_register: Uint128,
+}
+
 pub const PREFIXED_USER_COMBINATION: Map<(&[u8], &[u8]), Vec<String>> = Map::new("holders");
 pub const PREFIXED_WINNER: Map<(&[u8], &[u8]), WinnerRewardClaims> = Map::new("winner");
 pub const PREFIXED_RANK: Map<(&[u8], &[u8]), Uint128> = Map::new("rank");
@@ -54,6 +62,7 @@ pub const COUNT_PLAYERS: Map<&[u8], Uint128> = Map::new("count");
 pub const COUNT_TICKETS: Map<&[u8], Uint128> = Map::new("tickets");
 pub const WINNING_COMBINATION: Map<&[u8], String> = Map::new("winning");
 pub const JACKPOT: Map<&[u8], Uint128> = Map::new("jackpot");
+pub const DRAW_OWN_STATE: Map<&[u8], DrawOwnState> = Map::new("draw");
 
 pub fn combination_save(
     storage: &mut dyn Storage,
