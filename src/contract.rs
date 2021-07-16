@@ -586,25 +586,25 @@ pub fn handle_present_proposal(
     let mut msgs = vec![];
     // Valid the proposal
     match poll.proposal {
-        Proposal::LotteryEveryBlockTime => {
+        proposal if proposal == Proposal::LotteryEveryBlockTime => {
             state.every_block_time_play = poll.amount.u128() as u64;
         }
-        Proposal::DrandWorkerFeePercentage => {
+        proposal if proposal == Proposal::DrandWorkerFeePercentage => {
             state.fee_for_drand_worker_in_percentage = poll.amount.u128() as u8;
         }
-        Proposal::JackpotRewardPercentage => {
+        proposal if proposal == Proposal::JackpotRewardPercentage => {
             state.jackpot_percentage_reward = poll.amount.u128() as u8;
         }
-        Proposal::AmountToRegister => {
+        proposal if proposal == Proposal::AmountToRegister => {
             state.price_per_ticket_to_register = poll.amount;
         }
-        Proposal::PrizesPerRanks => {
+        proposal if proposal == Proposal::PrizesPerRanks => {
             state.prize_rank_winner_percentage = poll.prizes_per_ranks;
         }
-        Proposal::HolderFeePercentage => {
+        proposal if proposal == Proposal::HolderFeePercentage => {
             state.token_holder_percentage_fee_reward = poll.amount.u128() as u8
         }
-        Proposal::SecurityMigration => {
+        proposal if proposal == Proposal::SecurityMigration => {
             let migration: Migration = poll.migration.unwrap();
 
             let migrate = WasmMsg::Migrate {
@@ -615,7 +615,7 @@ pub fn handle_present_proposal(
 
             msgs.push(migrate.into())
         }
-        Proposal::DaoFunding => {
+        proposal if proposal == Proposal::DaoFunding => {
             let recipient = match poll.recipient {
                 None => poll.creator.to_string(),
                 Some(address) => address,
@@ -658,14 +658,12 @@ pub fn handle_present_proposal(
 
             msgs.push(res_transfer.into())
         }
-        Proposal::StakingContractMigration => {
+        proposal if proposal == Proposal::StakingContractMigration => {
             state.loterra_staking_contract_address =
                 deps.api.addr_canonicalize(&poll.recipient.unwrap())?;
         }
-        Proposal::PollSurvey => {}
-        _ =>
-        // Give back a response to DAO contract
-        {
+        proposal if proposal == Proposal::PollSurvey => {}
+        _ => {
             return Ok(Response {
                 submessages: vec![],
                 messages: vec![],
@@ -675,7 +673,7 @@ pub fn handle_present_proposal(
                     attr("applied", false),
                     attr("poll_id", poll_id),
                 ],
-            })
+            });
         }
     }
 
