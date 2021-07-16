@@ -101,7 +101,7 @@ pub struct GetPollResponse {
     pub start_height: u64,
     pub description: String,
     pub amount: Uint128,
-    pub prizes_per_ranks: Vec<u8>,
+    pub prizes_per_ranks: Vec<u64>,
     pub recipient: Option<String>,
     pub weight_yes_vote: Uint128,
     pub weight_no_vote: Uint128,
@@ -139,7 +139,7 @@ pub struct Round {
 pub struct DrawOwnStateResponse {
     pub jackpot_percentage_reward: u8,
     pub token_holder_percentage_fee_reward: u8,
-    pub prize_rank_winner_percentage: Vec<u8>,
+    pub prize_rank_winner_percentage: Vec<u64>,
     pub price_per_ticket_to_register: Uint128,
 }
 
