@@ -210,6 +210,29 @@
       "additionalProperties": false
     },
     {
+      "description": "Get lottery state by lottery id",
+      "type": "object",
+      "required": [
+        "lottery_state"
+      ],
+      "properties": {
+        "lottery_state": {
+          "type": "object",
+          "required": [
+            "lottery_id"
+          ],
+          "properties": {
+            "lottery_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
       "description": "Get the needed round for workers adding randomness to Terrand",
       "type": "object",
       "required": [
