@@ -1,7 +1,9 @@
+use crate::msg::{GetPollResponse, Proposal};
 use crate::query::{GetHoldersResponse, HoldersInfo};
+use crate::state::PollStatus;
 use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
-    from_slice, to_binary, Binary, Coin, ContractResult, Decimal, OwnedDeps, Querier,
+    from_slice, to_binary, Addr, Binary, Coin, ContractResult, Decimal, OwnedDeps, Querier,
     QuerierResult, QueryRequest, SystemError, SystemResult, Uint128, WasmQuery,
 };
 use serde::Serialize;
@@ -166,6 +168,27 @@ impl WasmMockQuerier {
                         };
                         return SystemResult::Ok(ContractResult::from(to_binary(&msg_balance)));
                     }
+                } else if msg == &Binary::from(r#"{"GetPoll":{"poll_id":1}}"#.as_bytes()) {
+                    let msg = GetPollResponse {
+                        creator: Addr::unchecked("addr0002"),
+                        status: PollStatus::Passed,
+                        end_height: 0,
+                        start_height: 0,
+                        description: "".to_string(),
+                        weight_yes_vote: Default::default(),
+                        weight_no_vote: Default::default(),
+                        yes_vote: 0,
+                        no_vote: 0,
+                        amount: Uint128(200),
+                        prizes_per_ranks: vec![],
+                        proposal: Proposal::DaoFunding,
+                        recipient: None,
+                        migration: None,
+                        collateral: Default::default(),
+                        applied: false,
+                        contract_address: Addr::unchecked("ok"),
+                    };
+                    return SystemResult::Ok(ContractResult::from(to_binary(&msg)));
                 }
                 panic!("DO NOT ENTER HERE")
             }

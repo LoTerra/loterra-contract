@@ -66,29 +66,6 @@
       "additionalProperties": false
     },
     {
-      "description": "Get specific poll",
-      "type": "object",
-      "required": [
-        "get_poll"
-      ],
-      "properties": {
-        "get_poll": {
-          "type": "object",
-          "required": [
-            "poll_id"
-          ],
-          "properties": {
-            "poll_id": {
-              "type": "integer",
-              "format": "uint64",
-              "minimum": 0.0
-            }
-          }
-        }
-      },
-      "additionalProperties": false
-    },
-    {
       "description": "Count players by lottery id",
       "type": "object",
       "required": [
@@ -217,6 +194,29 @@
       ],
       "properties": {
         "players": {
+          "type": "object",
+          "required": [
+            "lottery_id"
+          ],
+          "properties": {
+            "lottery_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Get lottery state by lottery id",
+      "type": "object",
+      "required": [
+        "lottery_state"
+      ],
+      "properties": {
+        "lottery_state": {
           "type": "object",
           "required": [
             "lottery_id"

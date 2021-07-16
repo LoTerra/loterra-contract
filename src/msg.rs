@@ -1,8 +1,8 @@
-use crate::state::{PollStatus, Proposal, State, WinnerRewardClaims};
+use crate::state::{PollStatus, State, WinnerRewardClaims};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::Uint128;
+use cosmwasm_std::{Addr, Binary, Uint128};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
@@ -13,7 +13,6 @@ pub struct InstantiateMsg {
     pub terrand_contract_address: String,
     pub loterra_cw20_contract_address: String,
     pub loterra_staking_contract_address: String,
-    pub holders_bonus_block_time_end: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -30,26 +29,8 @@ pub enum ExecuteMsg {
     Claim { addresses: Option<Vec<String>> },
     /// Collect jackpot
     Collect { address: Option<String> },
-    /// DAO
-    /// Make a proposal
-    Poll {
-        description: String,
-        proposal: Proposal,
-        amount: Option<Uint128>,
-        prize_per_rank: Option<Vec<u8>>,
-        recipient: Option<String>,
-    },
-    /// Vote the proposal
-    Vote { poll_id: u64, approve: bool },
-    /// Valid a proposal
+    /// Present poll
     PresentPoll { poll_id: u64 },
-    /// Reject a proposal
-    RejectPoll { poll_id: u64 },
-    /// Admin
-    /// Security owner can switch on off to prevent exploit
-    SafeLock {},
-    /// Admin renounce and restore contract address to admin for full decentralization
-    Renounce {},
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -61,8 +42,6 @@ pub enum QueryMsg {
     Combination { lottery_id: u64, address: String },
     /// Winner lottery rank and address
     Winner { lottery_id: u64 },
-    /// Get specific poll
-    GetPoll { poll_id: u64 },
     /// Count players by lottery id
     CountPlayer { lottery_id: u64 },
     /// Count ticket sold by lottery id
@@ -75,6 +54,8 @@ pub enum QueryMsg {
     Jackpot { lottery_id: u64 },
     /// Get all players by lottery id
     Players { lottery_id: u64 },
+    /// Get lottery state by lottery id
+    LotteryState { lottery_id: u64 },
     /// Get the needed round for workers adding randomness to Terrand
     GetRound {},
     /// Query Terrand smart contract to get the needed randomness to play the lottery
@@ -86,6 +67,51 @@ pub enum QueryMsg {
     Holders {},
     /// Update balance of the staking contract with rewards
     UpdateGlobalIndex {},
+}
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub enum DaoQueryMsg {
+    /// Query poll
+    GetPoll { poll_id: u64 },
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub enum Proposal {
+    LotteryEveryBlockTime,
+    HolderFeePercentage,
+    DrandWorkerFeePercentage,
+    PrizesPerRanks,
+    JackpotRewardPercentage,
+    AmountToRegister,
+    SecurityMigration,
+    DaoFunding,
+    StakingContractMigration,
+    PollSurvey,
+}
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct Migration {
+    pub contract_addr: String,
+    pub new_code_id: u64,
+    pub msg: Binary,
+}
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct GetPollResponse {
+    pub creator: Addr,
+    pub status: PollStatus,
+    pub end_height: u64,
+    pub start_height: u64,
+    pub description: String,
+    pub amount: Uint128,
+    pub prizes_per_ranks: Vec<u8>,
+    pub recipient: Option<String>,
+    pub weight_yes_vote: Uint128,
+    pub weight_no_vote: Uint128,
+    pub yes_vote: u64,
+    pub no_vote: u64,
+    pub proposal: Proposal,
+    pub migration: Option<Migration>,
+    pub collateral: Uint128,
+    pub contract_address: Addr,
+    pub applied: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -105,25 +131,16 @@ pub struct AllWinnersResponse {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct GetPollResponse {
-    pub creator: String,
-    pub status: PollStatus,
-    pub end_height: u64,
-    pub start_height: u64,
-    pub description: String,
-    pub amount: Uint128,
-    pub prize_per_rank: Vec<u8>,
-    pub migration_address: Option<String>,
-    pub weight_yes_vote: Uint128,
-    pub weight_no_vote: Uint128,
-    pub yes_vote: u64,
-    pub no_vote: u64,
-    pub proposal: Proposal,
+pub struct Round {
+    pub next_round: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct Round {
-    pub next_round: u64,
+pub struct DrawOwnStateResponse {
+    pub jackpot_percentage_reward: u8,
+    pub token_holder_percentage_fee_reward: u8,
+    pub prize_rank_winner_percentage: Vec<u8>,
+    pub price_per_ticket_to_register: Uint128,
 }
 
 pub type RoundResponse = Round;
