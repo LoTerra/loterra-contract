@@ -4,8 +4,8 @@ use crate::msg::{
     GetPollResponse, InstantiateMsg, Migration, Proposal, QueryMsg, RoundResponse, WinnerResponse,
 };
 use crate::state::{
-    all_winners, combination_save, read_state, save_winner, store_state, State,
-    ALL_USER_COMBINATION, COUNT_PLAYERS, COUNT_TICKETS, JACKPOT, PREFIXED_RANK,
+    all_winners, combination_save, read_state, save_winner, store_state, DrawOwnState, State,
+    ALL_USER_COMBINATION, COUNT_PLAYERS, COUNT_TICKETS, DRAW_OWN_STATE, JACKPOT, PREFIXED_RANK,
     PREFIXED_USER_COMBINATION, PREFIXED_WINNER, STATE, WINNING_COMBINATION,
 };
 use crate::taxation::deduct_tax;
@@ -52,6 +52,19 @@ pub fn instantiate(
             .addr_canonicalize(&msg.loterra_staking_contract_address)?,
         lottery_counter: 1,
     };
+
+    // Save current draw state
+    DRAW_OWN_STATE.save(
+        deps.storage,
+        &state.lottery_counter.to_be_bytes(),
+        &DrawOwnState {
+            jackpot_percentage_reward: state.jackpot_percentage_reward,
+            token_holder_percentage_fee_reward: state.token_holder_percentage_fee_reward,
+            prize_rank_winner_percentage: state.prize_rank_winner_percentage.clone(),
+            price_per_ticket_to_register: state.price_per_ticket_to_register,
+        },
+    )?;
+    // Save the state
     STATE.save(deps.storage, &state)?;
 
     Ok(Response::default())
@@ -81,6 +94,7 @@ pub fn handle_register(
 ) -> StdResult<Response> {
     // Load the state
     let state = read_state(deps.storage)?;
+    let draw_state = DRAW_OWN_STATE.load(deps.storage, &state.lottery_counter.to_be_bytes())?;
 
     // Check if the lottery is about to play and cancel new ticket to enter until play
     if env.block.time > Timestamp::from_seconds(state.block_time_play) {
@@ -107,7 +121,7 @@ pub fn handle_register(
     let sent = match info.funds.len() {
         0 => Err(StdError::generic_err(format!(
             "you need to send {}{} per combination in order to register",
-            &state.price_per_ticket_to_register, &state.denom_stable
+            &draw_state.price_per_ticket_to_register, &state.denom_stable
         ))),
         1 => {
             if info.funds[0].denom == state.denom_stable {
@@ -115,7 +129,7 @@ pub fn handle_register(
             } else {
                 Err(StdError::generic_err(format!(
                     "you need to send {}{} per combination in order to register",
-                    &state.price_per_ticket_to_register, &state.denom_stable
+                    &draw_state.price_per_ticket_to_register, &state.denom_stable
                 )))
             }
         }
@@ -128,14 +142,14 @@ pub fn handle_register(
     if sent.is_zero() {
         return Err(StdError::generic_err(format!(
             "you need to send {}{} per combination in order to register",
-            &state.price_per_ticket_to_register, &state.denom_stable
+            &draw_state.price_per_ticket_to_register, &state.denom_stable
         )));
     }
     // Handle the player is not sending too much or too less
-    if sent.u128() != state.price_per_ticket_to_register.u128() * combination.len() as u128 {
+    if sent.u128() != draw_state.price_per_ticket_to_register.u128() * combination.len() as u128 {
         return Err(StdError::generic_err(format!(
             "send {}{}",
-            state.price_per_ticket_to_register.u128() * combination.len() as u128,
+            draw_state.price_per_ticket_to_register.u128() * combination.len() as u128,
             state.denom_stable
         )));
     }
@@ -156,7 +170,7 @@ pub fn handle_register(
         data: None,
         attributes: vec![
             attr("action", "register"),
-            attr("price_per_ticket", state.price_per_ticket_to_register),
+            attr("price_per_ticket", draw_state.price_per_ticket_to_register),
             attr("amount_ticket_purchased", combination.len()),
             attr("buyer", info.sender),
         ],
@@ -171,6 +185,7 @@ pub fn handle_play(deps: DepsMut, env: Env, info: MessageInfo) -> StdResult<Resp
 
     // Load the state
     let mut state = read_state(deps.storage)?;
+    let draw_state = DRAW_OWN_STATE.load(deps.storage, &state.lottery_counter.to_be_bytes())?;
 
     // calculate next round randomness
     let from_genesis = state
@@ -228,9 +243,9 @@ pub fn handle_play(deps: DepsMut, env: Env, info: MessageInfo) -> StdResult<Resp
         .query_balance(&env.contract.address, &state.denom_stable)
         .unwrap();
     // Max amount winners can claim
-    let jackpot = balance
-        .amount
-        .mul(Decimal::percent(state.jackpot_percentage_reward as u64));
+    let jackpot = balance.amount.mul(Decimal::percent(
+        draw_state.jackpot_percentage_reward as u64,
+    ));
 
     // Drand worker fee
     let fee_for_drand_worker = jackpot
@@ -261,8 +276,21 @@ pub fn handle_play(deps: DepsMut, env: Env, info: MessageInfo) -> StdResult<Resp
         &state.lottery_counter.to_be_bytes(),
         &jackpot_after,
     )?;
+
     // Update the state
     state.lottery_counter += 1;
+
+    // Save next draw state
+    DRAW_OWN_STATE.save(
+        deps.storage,
+        &state.lottery_counter.to_be_bytes(),
+        &DrawOwnState {
+            jackpot_percentage_reward: state.jackpot_percentage_reward,
+            token_holder_percentage_fee_reward: state.token_holder_percentage_fee_reward,
+            prize_rank_winner_percentage: state.prize_rank_winner_percentage.clone(),
+            price_per_ticket_to_register: state.price_per_ticket_to_register,
+        },
+    )?;
 
     // Save the new state
     store_state(deps.storage, &state)?;
@@ -394,6 +422,8 @@ pub fn handle_collect(
     // Load state
     let state = read_state(deps.storage)?;
     let last_lottery_counter_round = state.lottery_counter - 1;
+    let draw_state =
+        DRAW_OWN_STATE.load(deps.storage, &last_lottery_counter_round.to_be_bytes())?;
     let jackpot_reward = JACKPOT.load(deps.storage, &last_lottery_counter_round.to_be_bytes())?;
 
     if env.block.time
@@ -460,7 +490,7 @@ pub fn handle_collect(
         )?;
         let prize = jackpot_reward
             .mul(Decimal::percent(
-                state.prize_rank_winner_percentage[rank as usize - 1] as u64,
+                draw_state.prize_rank_winner_percentage[rank as usize - 1] as u64,
             ))
             .u128()
             / rank_count.u128() as u128;
@@ -481,7 +511,7 @@ pub fn handle_collect(
     let total_prize = Uint128::from(total_prize);
     // Amount token holders can claim of the reward as fee
     let token_holder_fee_reward = total_prize.mul(Decimal::percent(
-        state.token_holder_percentage_fee_reward as u64,
+        draw_state.token_holder_percentage_fee_reward as u64,
     ));
 
     let total_prize_after = total_prize.checked_sub(token_holder_fee_reward)?;
@@ -556,25 +586,25 @@ pub fn handle_present_proposal(
     let mut msgs = vec![];
     // Valid the proposal
     match poll.proposal {
-        Proposal::LotteryEveryBlockTime => {
+        proposal if proposal == Proposal::LotteryEveryBlockTime => {
             state.every_block_time_play = poll.amount.u128() as u64;
         }
-        Proposal::DrandWorkerFeePercentage => {
+        proposal if proposal == Proposal::DrandWorkerFeePercentage => {
             state.fee_for_drand_worker_in_percentage = poll.amount.u128() as u8;
         }
-        Proposal::JackpotRewardPercentage => {
+        proposal if proposal == Proposal::JackpotRewardPercentage => {
             state.jackpot_percentage_reward = poll.amount.u128() as u8;
         }
-        Proposal::AmountToRegister => {
+        proposal if proposal == Proposal::AmountToRegister => {
             state.price_per_ticket_to_register = poll.amount;
         }
-        Proposal::PrizesPerRanks => {
+        proposal if proposal == Proposal::PrizesPerRanks => {
             state.prize_rank_winner_percentage = poll.prizes_per_ranks;
         }
-        Proposal::HolderFeePercentage => {
+        proposal if proposal == Proposal::HolderFeePercentage => {
             state.token_holder_percentage_fee_reward = poll.amount.u128() as u8
         }
-        Proposal::SecurityMigration => {
+        proposal if proposal == Proposal::SecurityMigration => {
             let migration: Migration = poll.migration.unwrap();
 
             let migrate = WasmMsg::Migrate {
@@ -585,7 +615,7 @@ pub fn handle_present_proposal(
 
             msgs.push(migrate.into())
         }
-        Proposal::DaoFunding => {
+        proposal if proposal == Proposal::DaoFunding => {
             let recipient = match poll.recipient {
                 None => poll.creator.to_string(),
                 Some(address) => address,
@@ -613,7 +643,7 @@ pub fn handle_present_proposal(
                 //return reject_proposal(deps.storage, poll_id);
             }
             let msg_transfer = Cw20ExecuteMsg::Transfer {
-                recipient: recipient.to_string(),
+                recipient,
                 amount: poll.amount,
             };
 
@@ -628,14 +658,12 @@ pub fn handle_present_proposal(
 
             msgs.push(res_transfer.into())
         }
-        Proposal::StakingContractMigration => {
+        proposal if proposal == Proposal::StakingContractMigration => {
             state.loterra_staking_contract_address =
                 deps.api.addr_canonicalize(&poll.recipient.unwrap())?;
         }
-        Proposal::PollSurvey => {}
-        _ =>
-        // Give back a response to DAO contract
-        {
+        proposal if proposal == Proposal::PollSurvey => {}
+        _ => {
             return Ok(Response {
                 submessages: vec![],
                 messages: vec![],
@@ -645,7 +673,7 @@ pub fn handle_present_proposal(
                     attr("applied", false),
                     attr("poll_id", poll_id),
                 ],
-            })
+            });
         }
     }
 
@@ -1849,7 +1877,9 @@ mod tests {
                 amount: Uint128(9_000_000),
             }]);
             default_init(deps.as_mut());
-            let state = read_state(deps.as_ref().storage).unwrap();
+            let mut state = read_state(deps.as_ref().storage).unwrap();
+            state.lottery_counter = state.lottery_counter + 1;
+            store_state(deps.as_mut().storage, &state).unwrap();
             JACKPOT
                 .save(
                     deps.as_mut().storage,
@@ -1883,7 +1913,9 @@ mod tests {
                 amount: Uint128(9_000_000),
             }]);
             default_init(deps.as_mut());
-            let state = read_state(deps.as_ref().storage).unwrap();
+            let mut state = read_state(deps.as_ref().storage).unwrap();
+            state.lottery_counter = state.lottery_counter + 1;
+            store_state(deps.as_mut().storage, &state).unwrap();
             JACKPOT
                 .save(
                     deps.as_mut().storage,
@@ -1917,6 +1949,8 @@ mod tests {
             }]);
             default_init(deps.as_mut());
             let mut state = read_state(deps.as_ref().storage).unwrap();
+            state.lottery_counter = state.lottery_counter + 1;
+            store_state(deps.as_mut().storage, &state).unwrap();
             JACKPOT
                 .save(
                     deps.as_mut().storage,
@@ -1950,6 +1984,9 @@ mod tests {
 
             default_init(deps.as_mut());
             let mut state_before = read_state(deps.as_ref().storage).unwrap();
+            state_before.lottery_counter = state_before.lottery_counter + 1;
+            store_state(deps.as_mut().storage, &state_before).unwrap();
+
             JACKPOT
                 .save(
                     deps.as_mut().storage,
@@ -2011,6 +2048,8 @@ mod tests {
             }]);
             default_init(deps.as_mut());
             let mut state_before = read_state(deps.as_ref().storage).unwrap();
+            state_before.lottery_counter = state_before.lottery_counter + 1;
+            store_state(deps.as_mut().storage, &state_before).unwrap();
             JACKPOT
                 .save(
                     deps.as_mut().storage,
