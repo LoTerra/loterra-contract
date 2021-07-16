@@ -12,8 +12,8 @@ use crate::state::{
 use crate::taxation::deduct_tax;
 use cosmwasm_std::{
     attr, entry_point, to_binary, Addr, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Deps,
-    DepsMut, Env, MessageInfo, Response, StdError, StdResult, Timestamp, Uint128, WasmMsg,
-    WasmQuery,
+    DepsMut, Env, Fraction, MessageInfo, Response, StdError, StdResult, Timestamp, Uint128,
+    WasmMsg, WasmQuery,
 };
 use cw20::{BalanceResponse, Cw20ExecuteMsg, Cw20QueryMsg};
 use std::ops::Mul;
@@ -42,7 +42,7 @@ pub fn instantiate(
         jackpot_percentage_reward: 20,
         token_holder_percentage_fee_reward: 20,
         fee_for_drand_worker_in_percentage: 1,
-        prize_rank_winner_percentage: vec![87, 10, 2, 1],
+        prize_rank_winner_percentage: vec![870, 100, 20, 10],
         price_per_ticket_to_register: Uint128(1_000_000),
         terrand_contract_address: deps.api.addr_canonicalize(&msg.terrand_contract_address)?,
         loterra_cw20_contract_address: deps
@@ -326,10 +326,12 @@ pub fn handle_claim(
     {
         return Err(StdError::generic_err("Claiming is closed"));
     }
-    let last_lottery_counter_round = state.lottery_counter - 1;
+    let latest_lottery_counter_round = state.lottery_counter - 1;
+    // Retrieve last jackpot amount
+    // let latest_jackpot = JACKPOT.load(deps.storage, &latest_lottery_counter_round.to_be_bytes())?;
 
     let lottery_winning_combination = match WINNING_COMBINATION
-        .may_load(deps.storage, &last_lottery_counter_round.to_be_bytes())?
+        .may_load(deps.storage, &latest_lottery_counter_round.to_be_bytes())?
     {
         Some(combination) => Some(combination),
         None => {
@@ -345,7 +347,7 @@ pub fn handle_claim(
         None => {
             match PREFIXED_USER_COMBINATION.may_load(
                 deps.storage,
-                (&last_lottery_counter_round.to_be_bytes(), addr.as_slice()),
+                (&latest_lottery_counter_round.to_be_bytes(), addr.as_slice()),
             )? {
                 None => {}
                 Some(combo) => combination.push((addr, combo)),
@@ -356,7 +358,7 @@ pub fn handle_claim(
                 let addr = deps.api.addr_canonicalize(&address.as_str())?;
                 match PREFIXED_USER_COMBINATION.may_load(
                     deps.storage,
-                    (&last_lottery_counter_round.to_be_bytes(), addr.as_slice()),
+                    (&latest_lottery_counter_round.to_be_bytes(), addr.as_slice()),
                 )? {
                     None => {}
                     Some(combo) => combination.push((addr, combo)),
@@ -372,7 +374,7 @@ pub fn handle_claim(
     for (addr, comb_raw) in combination {
         match PREFIXED_WINNER.may_load(
             deps.storage,
-            (&last_lottery_counter_round.to_be_bytes(), addr.as_slice()),
+            (&latest_lottery_counter_round.to_be_bytes(), addr.as_slice()),
         )? {
             None => {
                 for combo in comb_raw {
@@ -386,7 +388,12 @@ pub fn handle_claim(
                     } as u8;
 
                     if rank > 0 {
-                        save_winner(deps.storage, last_lottery_counter_round, addr.clone(), rank)?;
+                        save_winner(
+                            deps.storage,
+                            latest_lottery_counter_round,
+                            addr.clone(),
+                            rank,
+                        )?;
                         some_winner += 1;
                     }
                 }
@@ -422,10 +429,10 @@ pub fn handle_collect(
 
     // Load state
     let state = read_state(deps.storage)?;
-    let last_lottery_counter_round = state.lottery_counter - 1;
+    let latest_lottery_counter_round = state.lottery_counter - 1;
     let draw_state =
-        DRAW_OWN_STATE.load(deps.storage, &last_lottery_counter_round.to_be_bytes())?;
-    let jackpot_reward = JACKPOT.load(deps.storage, &last_lottery_counter_round.to_be_bytes())?;
+        DRAW_OWN_STATE.load(deps.storage, &latest_lottery_counter_round.to_be_bytes())?;
+    let jackpot_reward = JACKPOT.load(deps.storage, &latest_lottery_counter_round.to_be_bytes())?;
 
     if env.block.time
         < Timestamp::from_seconds(
@@ -460,7 +467,7 @@ pub fn handle_collect(
     let mut rewards = match PREFIXED_WINNER.may_load(
         deps.storage,
         (
-            &last_lottery_counter_round.to_be_bytes(),
+            &latest_lottery_counter_round.to_be_bytes(),
             canonical_addr.as_slice(),
         ),
     )? {
@@ -485,16 +492,28 @@ pub fn handle_collect(
         let rank_count = PREFIXED_RANK.load(
             deps.storage,
             (
-                &last_lottery_counter_round.to_be_bytes(),
+                &latest_lottery_counter_round.to_be_bytes(),
                 &rank.to_be_bytes(),
             ),
         )?;
+
         let prize = jackpot_reward
-            .mul(Decimal::percent(
-                draw_state.prize_rank_winner_percentage[rank as usize - 1] as u64,
-            ))
+            .multiply_ratio(
+                Decimal::permille(
+                    draw_state.prize_rank_winner_percentage[rank as usize - 1] as u64,
+                )
+                .numerator(),
+                Decimal::permille(0).denominator(),
+            )
             .u128()
             / rank_count.u128() as u128;
+
+        /*let prize = jackpot_reward
+        .mul(Decimal::percent(
+            draw_state.prize_rank_winner_percentage[rank as usize - 1] as u64,
+        ))
+        .u128()
+        / rank_count.u128() as u128; */
         total_prize += prize
     }
 
@@ -503,7 +522,7 @@ pub fn handle_collect(
     PREFIXED_WINNER.save(
         deps.storage,
         (
-            &last_lottery_counter_round.to_be_bytes(),
+            &latest_lottery_counter_round.to_be_bytes(),
             canonical_addr.as_slice(),
         ),
         &rewards,
@@ -972,12 +991,12 @@ mod tests {
             let mut state = read_state(deps.as_ref().storage).unwrap();
             state.lottery_counter = 2;
             store_state(deps.as_mut().storage, &state).unwrap();
-            let last_lottery_counter_round = state.lottery_counter - 1;
+            let latest_lottery_counter_round = state.lottery_counter - 1;
             // Save winning combination
             WINNING_COMBINATION
                 .save(
                     deps.as_mut().storage,
-                    &last_lottery_counter_round.to_be_bytes(),
+                    &latest_lottery_counter_round.to_be_bytes(),
                     &"123456".to_string(),
                 )
                 .unwrap();
@@ -1077,11 +1096,14 @@ mod tests {
                 _ => panic!("Unexpected error"),
             }
 
-            let last_lottery_counter_round = state.lottery_counter - 1;
+            let latest_lottery_counter_round = state.lottery_counter - 1;
             let winners = PREFIXED_WINNER
                 .load(
                     deps.as_ref().storage,
-                    (&last_lottery_counter_round.to_be_bytes(), &addr.as_slice()),
+                    (
+                        &latest_lottery_counter_round.to_be_bytes(),
+                        &addr.as_slice(),
+                    ),
                 )
                 .unwrap();
 
@@ -1860,7 +1882,7 @@ mod tests {
 
     mod collect {
         use super::*;
-        use cosmwasm_std::CosmosMsg;
+        use cosmwasm_std::{CosmosMsg, Fraction};
 
         #[test]
         fn do_not_send_funds() {
@@ -1987,10 +2009,17 @@ mod tests {
             let info = mock_info(before_all.default_sender.as_str().clone(), &[]);
             let msg = ExecuteMsg::Collect { address: None };
             let res = execute(deps.as_mut(), env, info, msg);
+            println!("{:?}", res);
             match res {
                 Err(StdError::GenericErr { msg, .. }) => assert_eq!(msg, "Address is not a winner"),
                 _ => panic!("Unexpected error"),
-            }
+            };
+
+            //let x = Uint128(150_000).multiply_ratio(Uint128(252), Uint128(10000));
+            //let x = Uint128(150_000_000_000).checked_mul(Uint128(1230000));
+            //let x = Decimal::permille(14);
+            //let x = Decimal::from(x);
+            //println!("{:?}", x);
         }
         #[test]
         fn contract_balance_empty() {
