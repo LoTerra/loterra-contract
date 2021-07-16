@@ -328,7 +328,7 @@ pub fn handle_claim(
     }
     let latest_lottery_counter_round = state.lottery_counter - 1;
     // Retrieve last jackpot amount
-    let latest_jackpot = JACKPOT.load(deps.storage, &latest_lottery_counter_round.to_be_bytes())?;
+    // let latest_jackpot = JACKPOT.load(deps.storage, &latest_lottery_counter_round.to_be_bytes())?;
 
     let lottery_winning_combination = match WINNING_COMBINATION
         .may_load(deps.storage, &latest_lottery_counter_round.to_be_bytes())?
@@ -390,7 +390,6 @@ pub fn handle_claim(
                     if rank > 0 {
                         save_winner(deps.storage, latest_lottery_counter_round, addr.clone(), rank)?;
                         some_winner += 1;
-
 
 
                     }
