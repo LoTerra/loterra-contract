@@ -58,10 +58,10 @@ pub fn instantiate(
         deps.storage,
         &state.lottery_counter.to_be_bytes(),
         &DrawOwnState {
-            jackpot_percentage_reward: state.jackpot_percentage_reward.clone(),
-            token_holder_percentage_fee_reward: state.token_holder_percentage_fee_reward.clone(),
+            jackpot_percentage_reward: state.jackpot_percentage_reward,
+            token_holder_percentage_fee_reward: state.token_holder_percentage_fee_reward,
             prize_rank_winner_percentage: state.prize_rank_winner_percentage.clone(),
-            price_per_ticket_to_register: state.price_per_ticket_to_register.clone(),
+            price_per_ticket_to_register: state.price_per_ticket_to_register,
         },
     )?;
     // Save the state
@@ -285,10 +285,10 @@ pub fn handle_play(deps: DepsMut, env: Env, info: MessageInfo) -> StdResult<Resp
         deps.storage,
         &state.lottery_counter.to_be_bytes(),
         &DrawOwnState {
-            jackpot_percentage_reward: state.jackpot_percentage_reward.clone(),
-            token_holder_percentage_fee_reward: state.token_holder_percentage_fee_reward.clone(),
+            jackpot_percentage_reward: state.jackpot_percentage_reward,
+            token_holder_percentage_fee_reward: state.token_holder_percentage_fee_reward,
             prize_rank_winner_percentage: state.prize_rank_winner_percentage.clone(),
-            price_per_ticket_to_register: state.price_per_ticket_to_register.clone(),
+            price_per_ticket_to_register: state.price_per_ticket_to_register,
         },
     )?;
 
@@ -643,7 +643,7 @@ pub fn handle_present_proposal(
                 //return reject_proposal(deps.storage, poll_id);
             }
             let msg_transfer = Cw20ExecuteMsg::Transfer {
-                recipient: recipient.to_string(),
+                recipient,
                 amount: poll.amount,
             };
 
