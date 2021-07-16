@@ -54,6 +54,8 @@ pub enum QueryMsg {
     Jackpot { lottery_id: u64 },
     /// Get all players by lottery id
     Players { lottery_id: u64 },
+    /// Get lottery state by lottery id
+    LotteryState { lottery_id: u64 },
     /// Get the needed round for workers adding randomness to Terrand
     GetRound {},
     /// Query Terrand smart contract to get the needed randomness to play the lottery
@@ -131,6 +133,14 @@ pub struct AllWinnersResponse {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Round {
     pub next_round: u64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct DrawOwnStateResponse {
+    pub jackpot_percentage_reward: u8,
+    pub token_holder_percentage_fee_reward: u8,
+    pub prize_rank_winner_percentage: Vec<u8>,
+    pub price_per_ticket_to_register: Uint128,
 }
 
 pub type RoundResponse = Round;

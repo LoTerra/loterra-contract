@@ -1,7 +1,8 @@
 use crate::helpers::{count_match, is_lower_hex};
 use crate::msg::{
-    AllCombinationResponse, AllWinnersResponse, ConfigResponse, DaoQueryMsg, ExecuteMsg,
-    GetPollResponse, InstantiateMsg, Migration, Proposal, QueryMsg, RoundResponse, WinnerResponse,
+    AllCombinationResponse, AllWinnersResponse, ConfigResponse, DaoQueryMsg, DrawOwnStateResponse,
+    ExecuteMsg, GetPollResponse, InstantiateMsg, Migration, Proposal, QueryMsg, RoundResponse,
+    WinnerResponse,
 };
 use crate::state::{
     all_winners, combination_save, read_state, save_winner, store_state, DrawOwnState, State,
@@ -712,6 +713,9 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         }
         QueryMsg::Jackpot { lottery_id } => to_binary(&query_jackpot(deps, lottery_id)?)?,
         QueryMsg::Players { lottery_id } => to_binary(&query_all_players(deps, lottery_id)?)?,
+        QueryMsg::LotteryState { lottery_id } => {
+            to_binary(&query_lottery_state(deps, lottery_id)?)?
+        }
         _ => to_binary(&())?,
     };
     Ok(response)
@@ -731,7 +735,21 @@ fn query_winner_rank(deps: Deps, lottery_id: u64, rank: u8) -> StdResult<Uint128
     };
     Ok(amount)
 }
+fn query_lottery_state(deps: Deps, lottery_id: u64) -> StdResult<DrawOwnStateResponse> {
+    let lottery_state = match DRAW_OWN_STATE.may_load(deps.storage, &lottery_id.to_be_bytes())? {
+        None => {
+            return Err(StdError::generic_err("Not found"));
+        }
+        Some(state) => DrawOwnStateResponse {
+            jackpot_percentage_reward: state.jackpot_percentage_reward,
+            token_holder_percentage_fee_reward: state.token_holder_percentage_fee_reward,
+            prize_rank_winner_percentage: state.prize_rank_winner_percentage,
+            price_per_ticket_to_register: state.price_per_ticket_to_register,
+        },
+    };
 
+    Ok(lottery_state)
+}
 fn query_all_players(deps: Deps, lottery_id: u64) -> StdResult<Vec<String>> {
     let players = match ALL_USER_COMBINATION.may_load(deps.storage, &lottery_id.to_be_bytes())? {
         None => {
