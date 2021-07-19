@@ -453,11 +453,6 @@ pub fn handle_collect(
         Some(addr) => Addr::unchecked(addr),
     };
 
-    // Get the contract balance
-    let balance = deps
-        .querier
-        .query_balance(&env.contract.address, &state.denom_stable)?;
-
     let canonical_addr = deps.api.addr_canonicalize(&addr.as_str())?;
     // Load winner
     let mut rewards = match PREFIXED_WINNER.may_load(
