@@ -447,10 +447,7 @@ pub fn handle_collect(
     {
         return Err(StdError::generic_err("Collecting jackpot is closed"));
     }
-    // Ensure there is jackpot reward to claim
-    if jackpot_reward.is_zero() {
-        return Err(StdError::generic_err("No jackpot reward"));
-    }
+
     let addr = match address {
         None => info.sender.clone(),
         Some(addr) => Addr::unchecked(addr),
@@ -460,10 +457,6 @@ pub fn handle_collect(
     let balance = deps
         .querier
         .query_balance(&env.contract.address, &state.denom_stable)?;
-    // Ensure the contract have the balance
-    if balance.amount.is_zero() {
-        return Err(StdError::generic_err("Empty contract balance"));
-    }
 
     let canonical_addr = deps.api.addr_canonicalize(&addr.as_str())?;
     // Load winner
@@ -483,11 +476,6 @@ pub fn handle_collect(
 
     if rewards.claimed {
         return Err(StdError::generic_err("Already claimed"));
-    }
-
-    // Ensure the contract have sufficient balance to handle the transaction
-    if balance.amount < jackpot_reward {
-        return Err(StdError::generic_err("Not enough funds in the contract"));
     }
 
     let mut total_prize: u128 = 0;
@@ -1990,40 +1978,6 @@ mod tests {
                 _ => panic!("Unexpected error"),
             }
         }
-        #[test]
-        fn no_jackpot_rewards() {
-            let before_all = before_all();
-            let mut deps = mock_dependencies(&[Coin {
-                denom: "ust".to_string(),
-                amount: Uint128(9_000_000),
-            }]);
-            default_init(deps.as_mut());
-            let mut state = read_state(deps.as_ref().storage).unwrap();
-            state.lottery_counter = state.lottery_counter + 1;
-            store_state(deps.as_mut().storage, &state).unwrap();
-            JACKPOT
-                .save(
-                    deps.as_mut().storage,
-                    &(state.lottery_counter - 1).to_be_bytes(),
-                    &Uint128::zero(),
-                )
-                .unwrap();
-            let mut env = mock_env();
-            env.block.time = Timestamp::from_seconds(
-                state
-                    .block_time_play
-                    .checked_sub(state.every_block_time_play / 2)
-                    .unwrap(),
-            );
-            let info = mock_info(before_all.default_sender.as_str().clone(), &[]);
-            let msg = ExecuteMsg::Collect { address: None };
-            let res = execute(deps.as_mut(), env, info, msg);
-
-            match res {
-                Err(StdError::GenericErr { msg, .. }) => assert_eq!(msg, "No jackpot reward"),
-                _ => panic!("Unexpected error"),
-            }
-        }
 
         #[test]
         fn no_winners() {
@@ -2066,71 +2020,7 @@ mod tests {
             //let x = Decimal::from(x);
             //println!("{:?}", x);
         }
-        #[test]
-        fn contract_balance_empty() {
-            let before_all = before_all();
-            let mut deps = mock_dependencies(&[Coin {
-                denom: "ust".to_string(),
-                amount: Uint128(0),
-            }]);
 
-            default_init(deps.as_mut());
-            let mut state_before = read_state(deps.as_ref().storage).unwrap();
-            state_before.lottery_counter = state_before.lottery_counter + 1;
-            store_state(deps.as_mut().storage, &state_before).unwrap();
-
-            JACKPOT
-                .save(
-                    deps.as_mut().storage,
-                    &(state_before.lottery_counter - 1).to_be_bytes(),
-                    &Uint128(1_000_000),
-                )
-                .unwrap();
-
-            let addr1 = deps.api.addr_canonicalize(&"address1".to_string()).unwrap();
-            let addr2 = deps
-                .api
-                .addr_canonicalize(&before_all.default_sender)
-                .unwrap();
-            println!(
-                "{:?}",
-                deps.api.addr_canonicalize(&"address1".to_string()).unwrap()
-            );
-
-            save_winner(deps.as_mut().storage, 1u64, addr1.clone(), 1).unwrap();
-
-            save_winner(deps.as_mut().storage, 1u64, addr2, 1).unwrap();
-            let state = read_state(deps.as_ref().storage).unwrap();
-            let mut env = mock_env();
-            env.block.time = Timestamp::from_seconds(
-                state
-                    .block_time_play
-                    .checked_sub(state.every_block_time_play / 2)
-                    .unwrap(),
-            );
-            let info = mock_info("address1", &[]);
-            let msg = ExecuteMsg::Collect { address: None };
-            let res = execute(deps.as_mut(), env, info, msg);
-
-            println!("{:?}", res);
-            match res {
-                Err(StdError::GenericErr { msg, .. }) => assert_eq!(msg, "Empty contract balance"),
-                _ => panic!("Unexpected error"),
-            }
-            /*
-            let store = winner_storage(&mut deps.storage, 1u64)
-                .load(&1_u8.to_be_bytes())
-                .unwrap();
-            let claimed_address = deps
-                .api
-                .canonical_address(&before_all.default_sender)
-                .unwrap();
-            assert_eq!(store.winners[1].address, claimed_address);
-            //assert!(!store.winners[1].claimed);
-            println!("{:?}", store.winners[1].claimed);
-
-             */
-        }
         #[test]
         fn some_winner_sender_excluded() {
             let before_all = before_all();
