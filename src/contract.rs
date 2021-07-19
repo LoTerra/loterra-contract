@@ -42,7 +42,7 @@ pub fn instantiate(
         jackpot_percentage_reward: 20,
         token_holder_percentage_fee_reward: 20,
         fee_for_drand_worker_in_percentage: 1,
-        prize_rank_winner_percentage: vec![870, 100, 20, 10],
+        prize_rank_winner_percentage: vec![870, 100, 20, 10, 0, 1],
         price_per_ticket_to_register: Uint128(1_000_000),
         terrand_contract_address: deps.api.addr_canonicalize(&msg.terrand_contract_address)?,
         loterra_cw20_contract_address: deps
@@ -379,11 +379,14 @@ pub fn handle_claim(
             None => {
                 for combo in comb_raw {
                     let match_count = count_match(&combo, &lottery_winning_combination);
+
                     let rank = match match_count {
                         count if count == lottery_winning_combination.len() => 1,
                         count if count == lottery_winning_combination.len() - 1 => 2,
                         count if count == lottery_winning_combination.len() - 2 => 3,
                         count if count == lottery_winning_combination.len() - 3 => 4,
+                        count if count == lottery_winning_combination.len() - 4 => 5,
+                        count if count == lottery_winning_combination.len() - 5 => 6,
                         _ => 0,
                     } as u8;
 
@@ -1029,6 +1032,10 @@ mod tests {
                 .api
                 .addr_canonicalize(&before_all.default_sender)
                 .unwrap();
+            let addr2 = deps
+                .api
+                .addr_canonicalize(&before_all.default_sender_two)
+                .unwrap();
             let mut state = read_state(deps.as_ref().storage).unwrap();
             // Save combination by senders
 
@@ -1041,6 +1048,19 @@ mod tests {
                     "12345f".to_string(),
                     "1234a6".to_string(),
                     "000000".to_string(),
+                ],
+            )
+            .unwrap();
+
+            combination_save(
+                deps.as_mut().storage,
+                state.lottery_counter,
+                addr2.clone(),
+                vec![
+                    "000006".to_string(),
+                    "000056".to_string(),
+                    "000456".to_string(),
+                    "003456".to_string(),
                 ],
             )
             .unwrap();
@@ -1082,6 +1102,15 @@ mod tests {
                     attributes: vec![attr("action", "claim")]
                 }
             );
+            // claim with default sender 2
+            let res = execute(
+                deps.as_mut(),
+                env.clone(),
+                mock_info(before_all.default_sender_two.as_str().clone(), &[]),
+                msg.clone(),
+            )
+            .unwrap();
+
             // Claim again is not possible
             let res = execute(
                 deps.as_mut(),
@@ -1113,6 +1142,22 @@ mod tests {
             assert_eq!(winners.ranks[0], 1);
             assert_eq!(winners.ranks[1], 2);
             assert_eq!(winners.ranks[2], 2);
+
+            let winnerTwo = PREFIXED_WINNER
+                .load(
+                    deps.as_ref().storage,
+                    (
+                        &latest_lottery_counter_round.to_be_bytes(),
+                        &addr2.as_slice(),
+                    ),
+                )
+                .unwrap();
+            println!("{:?}", winnerTwo);
+            assert_eq!(winnerTwo.ranks.len(), 4);
+            assert_eq!(winnerTwo.ranks[0], 6);
+            assert_eq!(winnerTwo.ranks[1], 5);
+            assert_eq!(winnerTwo.ranks[2], 4);
+            assert_eq!(winnerTwo.ranks[3], 3);
         }
     }
 
@@ -2163,6 +2208,7 @@ mod tests {
 
             save_winner(deps.as_mut().storage, 1u64, addr2.clone(), 1).unwrap();
             save_winner(deps.as_mut().storage, 1u64, default_addr.clone(), 1).unwrap();
+            save_winner(deps.as_mut().storage, 1u64, default_addr.clone(), 6).unwrap();
 
             let mut env = mock_env();
             env.block.time = Timestamp::from_seconds(
@@ -2177,7 +2223,7 @@ mod tests {
             let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
             println!("{:?}", res);
             assert_eq!(res.messages.len(), 2);
-            let amount_claimed = Uint128(344554);
+            let amount_claimed = Uint128(345346);
             assert_eq!(
                 res.messages[0],
                 CosmosMsg::Bank(BankMsg::Send {
@@ -2200,7 +2246,7 @@ mod tests {
                     msg: Binary::from(r#"{"update_global_index":{}}"#.as_bytes()),
                     send: vec![Coin {
                         denom: "ust".to_string(),
-                        amount: Uint128(86138)
+                        amount: Uint128(86336)
                     }]
                 })
             );
