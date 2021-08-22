@@ -37,6 +37,7 @@ pub struct State {
     pub terrand_contract_address: CanonicalAddr,
     pub loterra_cw20_contract_address: CanonicalAddr,
     pub loterra_staking_contract_address: CanonicalAddr,
+    pub altered_contract_address: CanonicalAddr,
     pub safe_lock: bool,
     pub lottery_counter: u64,
     pub holders_bonus_block_time_end: u64,

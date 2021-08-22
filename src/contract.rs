@@ -19,6 +19,7 @@ use cosmwasm_std::{
     to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Env, Extern, HandleResponse,
     HumanAddr, InitResponse, LogAttribute, Querier, StdError, StdResult, Storage, Uint128,
 };
+use cw20::Cw20HandleMsg;
 use std::ops::{Add, Mul, Sub};
 
 const DRAND_GENESIS_TIME: u64 = 1595431050;
@@ -26,7 +27,7 @@ const DRAND_PERIOD: u64 = 30;
 const DRAND_NEXT_ROUND_SECURITY: u64 = 10;
 const MAX_DESCRIPTION_LEN: u64 = 255;
 const MIN_DESCRIPTION_LEN: u64 = 6;
-const HOLDERS_MAX_REWARD: u8 = 20;
+const HOLDERS_MAX_REWARD: u8 = 100;
 const WORKER_MAX_REWARD: u8 = 10;
 const DIV_BLOCK_TIME_BY_X: u64 = 2;
 // Note, you can use StdResult in some functions where you do not
@@ -57,6 +58,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         loterra_staking_contract_address: deps
             .api
             .canonical_address(&msg.loterra_staking_contract_address)?,
+        altered_contract_address: deps.api.canonical_address(&msg.altered_contract_address)?,
         safe_lock: false,
         lottery_counter: 1,
         holders_bonus_block_time_end: msg.holders_bonus_block_time_end,
@@ -75,8 +77,9 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
     match msg {
         HandleMsg::Register {
             address,
+            altered_bonus,
             combination,
-        } => handle_register(deps, env, address, combination),
+        } => handle_register(deps, env, address, altered_bonus, combination),
         HandleMsg::Play {} => handle_play(deps, env),
         HandleMsg::Claim { addresses } => handle_claim(deps, env, addresses),
         HandleMsg::Collect { address } => handle_collect(deps, env, address),
@@ -143,6 +146,7 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
     address: Option<HumanAddr>,
+    altered_bonus: Option<bool>,
     combination: Vec<String>,
 ) -> StdResult<HandleResponse> {
     // Load the state
@@ -162,7 +166,7 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
 
     // Check if address filled as param
     let addr = match address {
-        None => env.message.sender,
+        None => env.message.sender.clone(),
         Some(addr) => addr,
     };
 
@@ -207,13 +211,26 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
             state.denom_stable
         )));
     }
-    // Handle the player is not sending too much or too less
-    if sent.u128() != state.price_per_ticket_to_register.u128() * combination.len() as u128 {
-        return Err(StdError::generic_err(format!(
-            "send {}{}",
-            state.price_per_ticket_to_register.clone().u128() * combination.len() as u128,
-            state.denom_stable
-        )));
+    match altered_bonus {
+        None => {
+            // Handle the player is not sending too much or too less
+            if sent.u128() != state.price_per_ticket_to_register.u128() * combination.len() as u128
+            {
+                return Err(StdError::generic_err(format!(
+                    "send {}{}",
+                    state.price_per_ticket_to_register.clone().u128() * combination.len() as u128,
+                    state.denom_stable
+                )));
+            }
+        }
+        Some(_) => {
+            let altered_human = deps.api.human_address(&state.altered_contract_address)?;
+
+            let msg = Cw20HandleMsg::BurnFrom {
+                owner: env.message.sender,
+                amount: Default::default(),
+            };
+        }
     }
 
     // save combination

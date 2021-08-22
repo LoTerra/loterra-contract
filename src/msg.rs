@@ -13,6 +13,7 @@ pub struct InitMsg {
     pub terrand_contract_address: HumanAddr,
     pub loterra_cw20_contract_address: HumanAddr,
     pub loterra_staking_contract_address: HumanAddr,
+    pub altered_contract_address: HumanAddr,
     pub holders_bonus_block_time_end: u64,
 }
 
@@ -22,6 +23,7 @@ pub enum HandleMsg {
     /// Registering to the lottery
     Register {
         address: Option<HumanAddr>,
+        altered_bonus: Option<bool>,
         combination: Vec<String>,
     },
     /// Run the lottery
