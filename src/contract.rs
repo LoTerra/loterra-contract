@@ -15,10 +15,7 @@ use crate::state::{
     winner_storage_read, PollInfoState, PollStatus, Proposal, State,
 };
 use crate::taxation::deduct_tax;
-use cosmwasm_std::{
-    to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Env, Extern, HandleResponse,
-    HumanAddr, InitResponse, LogAttribute, Querier, StdError, StdResult, Storage, Uint128,
-};
+use cosmwasm_std::{to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Env, Extern, HandleResponse, HumanAddr, InitResponse, LogAttribute, Querier, StdError, StdResult, Storage, Uint128, WasmMsg};
 use cw20::Cw20HandleMsg;
 use std::ops::{Add, Mul, Sub};
 
@@ -211,6 +208,7 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
             state.denom_stable
         )));
     }
+    let mut execute_msg = vec![];
     match altered_bonus {
         None => {
             // Handle the player is not sending too much or too less
@@ -224,12 +222,33 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
             }
         }
         Some(_) => {
-            let altered_human = deps.api.human_address(&state.altered_contract_address)?;
+            // Ratio is a decimal 0.5
+            let bonus_burn = state.price_per_ticket_to_register.mul(Decimal::from_ratio(Uint128(1), Uint128(2))).into();
+            // Bonus amount
+            let bonus = Uint128(state.price_per_ticket_to_register.clone().u128() * combination.len() as u128).multiply_ratio(Uint128(5), Uint128(100));
+            // Verify if player is sending correct amount
+            if sent.u128() != state.price_per_ticket_to_register.u128() * Uint128::from(combination.len() as u128).sub(bonus_burn).unwrap().u128()  {
+                return Err(StdError::generic_err(format!(
+                    "send {}{}",
+                    state.price_per_ticket_to_register.clone().u128() * combination.len() as u128,
+                    state.denom_stable
+                )));
+            }
 
-            let msg = Cw20HandleMsg::BurnFrom {
+            /*
+                Prepare the burn message
+             */
+            let altered_human = deps.api.human_address(&state.altered_contract_address)?;
+            let burn_msg = Cw20HandleMsg::BurnFrom {
                 owner: env.message.sender,
-                amount: Default::default(),
+                amount: bonus_burn.sub(bonus).unwrap(),
             };
+            let wasm_msg =WasmMsg::Execute {
+                contract_addr: altered_human,
+                msg: to_binary(&burn_msg)?,
+                send: vec![]
+            };
+            execute_msg.push(wasm_msg.into());
         }
     }
 
@@ -243,7 +262,7 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
     )?;
 
     Ok(HandleResponse {
-        messages: vec![],
+        messages: execute_msg,
         log: vec![LogAttribute {
             key: "action".to_string(),
             value: "register".to_string(),
@@ -1430,6 +1449,7 @@ mod tests {
             loterra_staking_contract_address: HumanAddr::from(
                 "terra1q88h7ewu6h3am4mxxeqhu3srloterrastaking",
             ),
+            altered_contract_address: HumanAddr::from("altered"),
             holders_bonus_block_time_end: BONUS_BLOCK_TIME_END,
         };
 
@@ -1654,6 +1674,7 @@ mod tests {
             config(&mut deps.storage).save(&state).unwrap();
             let msg = HandleMsg::Register {
                 address: None,
+                altered_bonus: None,
                 combination: vec!["1e3fab".to_string()],
             };
             let res = handle(
@@ -1685,6 +1706,7 @@ mod tests {
             default_init(&mut deps);
             let msg = HandleMsg::Register {
                 address: None,
+                altered_bonus: None,
                 combination: vec![
                     "1e3fab".to_string(),
                     "abcdef".to_string(),
@@ -1738,6 +1760,7 @@ mod tests {
             // Play 2 more combination
             let msg = HandleMsg::Register {
                 address: None,
+                altered_bonus: None,
                 combination: vec!["affe3b".to_string(), "098765".to_string()],
             };
             let res = handle(
@@ -1767,6 +1790,7 @@ mod tests {
             // Someone registering combination for other player
             let msg = HandleMsg::Register {
                 address: Some(before_all.default_sender_two.clone()),
+                altered_bonus: None,
                 combination: vec!["aaaaaa".to_string(), "bbbbbb".to_string()],
             };
             // default_sender_two sending combination for default_sender
@@ -1808,6 +1832,7 @@ mod tests {
             default_init(&mut deps);
             let msg = HandleMsg::Register {
                 address: None,
+                altered_bonus: None,
                 combination: vec!["1e3fab".to_string()],
             };
             let res = handle(
@@ -1839,6 +1864,7 @@ mod tests {
             default_init(&mut deps);
             let msg = HandleMsg::Register {
                 address: None,
+                altered_bonus: None,
                 combination: vec!["1e3fab".to_string()],
             };
             let res = handle(
@@ -1874,6 +1900,7 @@ mod tests {
             default_init(&mut deps);
             let msg = HandleMsg::Register {
                 address: None,
+                altered_bonus: None,
                 combination: vec!["1e3fab".to_string()],
             };
             let res = handle(
@@ -1906,6 +1933,7 @@ mod tests {
             default_init(&mut deps);
             let msg = HandleMsg::Register {
                 address: None,
+                altered_bonus: None,
                 combination: vec!["1e3far".to_string()],
             };
             let res = handle(
@@ -1937,6 +1965,7 @@ mod tests {
             default_init(&mut deps);
             let msg = HandleMsg::Register {
                 address: None,
+                altered_bonus: None,
                 combination: vec!["1e3far".to_string(), "1e3fac".to_string()],
             };
             let res = handle(
@@ -1968,6 +1997,7 @@ mod tests {
             default_init(&mut deps);
             let msg = HandleMsg::Register {
                 address: None,
+                altered_bonus: None,
                 combination: vec!["1e3fae".to_string(), "1e3fa2".to_string()],
             };
             // Fail sending less than required (1_000_000)
@@ -2016,6 +2046,7 @@ mod tests {
             default_init(&mut deps);
             let msg = HandleMsg::Register {
                 address: None,
+                altered_bonus: None,
                 combination: vec!["1e3fae".to_string()],
             };
             let state = config(&mut deps.storage).load().unwrap();
@@ -2154,6 +2185,7 @@ mod tests {
             // register some combination
             let msg = HandleMsg::Register {
                 address: None,
+                altered_bonus: None,
                 combination: vec!["1e3fab".to_string()],
             };
             handle(
@@ -2171,6 +2203,7 @@ mod tests {
 
             let msg = HandleMsg::Register {
                 address: None,
+                altered_bonus: None,
                 combination: vec!["39493d".to_string()],
             };
             handle(
@@ -2245,6 +2278,7 @@ mod tests {
             // register some combination
             let msg = HandleMsg::Register {
                 address: None,
+                altered_bonus: None,
                 combination: vec!["39498d".to_string()],
             };
             handle(
@@ -2314,6 +2348,7 @@ mod tests {
             // register some combination
             let msg = HandleMsg::Register {
                 address: None,
+                altered_bonus: None,
                 combination: vec!["1e3fab".to_string()],
             };
             handle(
@@ -2331,6 +2366,7 @@ mod tests {
 
             let msg = HandleMsg::Register {
                 address: None,
+                altered_bonus: None,
                 combination: vec!["39493d".to_string()],
             };
             handle(
@@ -2384,7 +2420,7 @@ mod tests {
                 .unwrap();
 
             println!("{:?}", jackpot_reward_after);
-            assert_eq!(20, state_after.token_holder_percentage_fee_reward);
+            assert_eq!(50, state_after.token_holder_percentage_fee_reward);
             assert_eq!(jackpot_reward_before, Uint128::zero());
             assert_ne!(jackpot_reward_after, jackpot_reward_before);
             // 720720 total fees
@@ -3249,7 +3285,7 @@ mod tests {
                 Err(GenericErr {
                     msg,
                     backtrace: None,
-                }) => assert_eq!(msg, "Amount between 0 to 20"),
+                }) => assert_eq!(msg, "Amount between 0 to 100"),
                 _ => panic!("Unexpected error"),
             }
 
