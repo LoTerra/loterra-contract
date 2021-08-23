@@ -223,14 +223,19 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
         }
         Some(_) => {
             // Ratio is a decimal 0.5
-            let bonus_burn = state.price_per_ticket_to_register.mul(Decimal::from_ratio(Uint128(1), Uint128(2))).into();
+            let bonus_burn: Uint128 = Uint128(state.price_per_ticket_to_register.clone().u128() * combination.len() as u128).mul(Decimal::from_ratio(Uint128(1), Uint128(3))).into();
+            println!("{}", bonus_burn);
+            println!("{}", combination.len() as u128);
             // Bonus amount
-            let bonus = Uint128(state.price_per_ticket_to_register.clone().u128() * combination.len() as u128).multiply_ratio(Uint128(5), Uint128(100));
+            let bonus: Uint128 = Uint128(state.price_per_ticket_to_register.clone().u128() * combination.len() as u128).multiply_ratio(Uint128(5), Uint128(100));
+            println!("{}", bonus);
+            println!("{}",(bonus_burn - bonus ).unwrap());
             // Verify if player is sending correct amount
-            if sent.u128() != state.price_per_ticket_to_register.u128() * Uint128::from(combination.len() as u128).sub(bonus_burn).unwrap().u128()  {
+            println!("{}", Uint128(state.price_per_ticket_to_register.clone().u128() * combination.len() as u128).sub(bonus_burn).unwrap().u128() );
+            if sent.u128() != Uint128(state.price_per_ticket_to_register.clone().u128() * combination.len() as u128).sub(bonus_burn).unwrap().u128() {
                 return Err(StdError::generic_err(format!(
                     "send {}{}",
-                    state.price_per_ticket_to_register.clone().u128() * combination.len() as u128,
+                    Uint128(state.price_per_ticket_to_register.clone().u128() * combination.len() as u128).sub(bonus_burn).unwrap().u128(),
                     state.denom_stable
                 )));
             }
@@ -238,12 +243,13 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
             /*
                 Prepare the burn message
              */
+
             let altered_human = deps.api.human_address(&state.altered_contract_address)?;
             let burn_msg = Cw20HandleMsg::BurnFrom {
                 owner: env.message.sender,
-                amount: bonus_burn.sub(bonus).unwrap(),
+                amount: (bonus_burn - bonus ).unwrap(),
             };
-            let wasm_msg =WasmMsg::Execute {
+            let wasm_msg = WasmMsg::Execute {
                 contract_addr: altered_human,
                 msg: to_binary(&burn_msg)?,
                 send: vec![]
@@ -2070,6 +2076,31 @@ mod tests {
                 ),
                 _ => panic!("Unexpected error"),
             }
+        }
+        #[test]
+        fn register_bonus_combination() {
+            let before_all = before_all();
+            let mut deps = mock_dependencies(before_all.default_length, &[]);
+            default_init(&mut deps);
+            let msg = HandleMsg::Register {
+                address: None,
+                altered_bonus: Some(true),
+                // 30 tickets
+                combination: vec!["1e3fa1".to_string(), "1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string()],
+            };
+            let res = handle(
+                &mut deps,
+                mock_env(
+                    before_all.default_sender,
+                    &[Coin {
+                        denom: "ust".to_string(),
+                        amount: Uint128(20_000_001),
+                    }],
+                ),
+                msg.clone(),
+            );
+
+            println!("{:?}", res)
         }
     }
     mod play {
