@@ -2204,7 +2204,12 @@ mod tests {
             assert_eq!(30, store.len());
             assert_eq!(store[3], "1e3fac".to_string());
             assert_eq!(store[4], "1e3fac".to_string());
-            println!("{:?}", res)
+            println!("{:?}", res);
+            // Check the player address is added to the vector of all players
+            let all_players = address_players_read(&deps.storage)
+                .load(addr.as_slice())
+                .unwrap();
+            assert!(all_players);
         }
     }
     mod play {
