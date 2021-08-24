@@ -25,6 +25,12 @@
                 }
               ]
             },
+            "altered_bonus": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "combination": {
               "type": "array",
               "items": {

@@ -3,6 +3,7 @@
   "title": "InitMsg",
   "type": "object",
   "required": [
+    "altered_contract_address",
     "block_time_play",
     "denom_stable",
     "every_block_time_play",
@@ -13,6 +14,9 @@
     "terrand_contract_address"
   ],
   "properties": {
+    "altered_contract_address": {
+      "$ref": "#/definitions/HumanAddr"
+    },
     "block_time_play": {
       "type": "integer",
       "format": "uint64",

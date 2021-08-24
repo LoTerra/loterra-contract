@@ -15,7 +15,10 @@ use crate::state::{
     winner_storage_read, PollInfoState, PollStatus, Proposal, State,
 };
 use crate::taxation::deduct_tax;
-use cosmwasm_std::{to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Env, Extern, HandleResponse, HumanAddr, InitResponse, LogAttribute, Querier, StdError, StdResult, Storage, Uint128, WasmMsg};
+use cosmwasm_std::{
+    to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Env, Extern, HandleResponse,
+    HumanAddr, InitResponse, LogAttribute, Querier, StdError, StdResult, Storage, Uint128, WasmMsg,
+};
 use cw20::Cw20HandleMsg;
 use std::ops::{Add, Mul, Sub};
 
@@ -223,36 +226,51 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
         }
         Some(_) => {
             // Ratio is a decimal 0.5
-            let bonus_burn: Uint128 = Uint128(state.price_per_ticket_to_register.clone().u128() * combination.len() as u128).mul(Decimal::from_ratio(Uint128(1), Uint128(3))).into();
-            println!("{}", bonus_burn);
-            println!("{}", combination.len() as u128);
+            let bonus_burn: Uint128 = Uint128(
+                state.price_per_ticket_to_register.clone().u128() * combination.len() as u128,
+            )
+            .mul(Decimal::from_ratio(Uint128(1), Uint128(3)))
+            .into();
             // Bonus amount
-            let bonus: Uint128 = Uint128(state.price_per_ticket_to_register.clone().u128() * combination.len() as u128).multiply_ratio(Uint128(5), Uint128(100));
-            println!("{}", bonus);
-            println!("{}",(bonus_burn - bonus ).unwrap());
+            let bonus: Uint128 = Uint128(
+                state.price_per_ticket_to_register.clone().u128() * combination.len() as u128,
+            )
+            .multiply_ratio(Uint128(5), Uint128(100));
             // Verify if player is sending correct amount
-            println!("{}", Uint128(state.price_per_ticket_to_register.clone().u128() * combination.len() as u128).sub(bonus_burn).unwrap().u128() );
-            if sent.u128() != Uint128(state.price_per_ticket_to_register.clone().u128() * combination.len() as u128).sub(bonus_burn).unwrap().u128() {
+            if sent.u128()
+                != Uint128(
+                    state.price_per_ticket_to_register.clone().u128() * combination.len() as u128,
+                )
+                .sub(bonus_burn)
+                .unwrap()
+                .u128()
+            {
                 return Err(StdError::generic_err(format!(
                     "send {}{}",
-                    Uint128(state.price_per_ticket_to_register.clone().u128() * combination.len() as u128).sub(bonus_burn).unwrap().u128(),
+                    Uint128(
+                        state.price_per_ticket_to_register.clone().u128()
+                            * combination.len() as u128
+                    )
+                    .sub(bonus_burn)
+                    .unwrap()
+                    .u128(),
                     state.denom_stable
                 )));
             }
 
             /*
-                Prepare the burn message
-             */
+               Prepare the burn message
+            */
 
             let altered_human = deps.api.human_address(&state.altered_contract_address)?;
             let burn_msg = Cw20HandleMsg::BurnFrom {
                 owner: env.message.sender,
-                amount: (bonus_burn - bonus ).unwrap(),
+                amount: (bonus_burn - bonus).unwrap(),
             };
             let wasm_msg = WasmMsg::Execute {
                 contract_addr: altered_human,
                 msg: to_binary(&burn_msg)?,
-                send: vec![]
+                send: vec![],
             };
             execute_msg.push(wasm_msg.into());
         }
@@ -2086,20 +2104,75 @@ mod tests {
                 address: None,
                 altered_bonus: Some(true),
                 // 30 tickets
-                combination: vec!["1e3fa1".to_string(), "1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string(),"1e3fac".to_string()],
+                combination: vec![
+                    "1e3fa1".to_string(),
+                    "1e3fac".to_string(),
+                    "1e3fac".to_string(),
+                    "1e3fac".to_string(),
+                    "1e3fac".to_string(),
+                    "1e3fac".to_string(),
+                    "1e3fac".to_string(),
+                    "1e3fac".to_string(),
+                    "1e3fac".to_string(),
+                    "1e3fac".to_string(),
+                    "1e3fac".to_string(),
+                    "1e3fac".to_string(),
+                    "1e3fac".to_string(),
+                    "1e3fac".to_string(),
+                    "1e3fac".to_string(),
+                    "1e3fac".to_string(),
+                    "1e3fac".to_string(),
+                    "1e3fac".to_string(),
+                    "1e3fac".to_string(),
+                    "1e3fac".to_string(),
+                    "1e3fac".to_string(),
+                    "1e3fac".to_string(),
+                    "1e3fac".to_string(),
+                    "1e3fac".to_string(),
+                    "1e3fac".to_string(),
+                    "1e3fac".to_string(),
+                    "1e3fac".to_string(),
+                    "1e3fac".to_string(),
+                    "1e3fac".to_string(),
+                    "1e3fac".to_string(),
+                ],
+            };
+            let burn = Cw20HandleMsg::BurnFrom {
+                owner: before_all.default_sender.clone(),
+                amount: Uint128(8499999),
             };
             let res = handle(
                 &mut deps,
                 mock_env(
-                    before_all.default_sender,
+                    before_all.default_sender.clone(),
                     &[Coin {
                         denom: "ust".to_string(),
                         amount: Uint128(20_000_001),
                     }],
                 ),
                 msg.clone(),
+            )
+            .unwrap();
+            assert_eq!(
+                res.messages[0],
+                CosmosMsg::Wasm(WasmMsg::Execute {
+                    contract_addr: HumanAddr::from("altered"),
+                    msg: to_binary(&burn).unwrap(),
+                    send: vec![]
+                })
             );
 
+            // Check combination added with success
+            let addr = deps
+                .api
+                .canonical_address(&before_all.default_sender)
+                .unwrap();
+            let store = user_combination_bucket_read(&mut deps.storage, 1u64)
+                .load(addr.as_slice())
+                .unwrap();
+            assert_eq!(30, store.len());
+            assert_eq!(store[3], "1e3fac".to_string());
+            assert_eq!(store[4], "1e3fac".to_string());
             println!("{:?}", res)
         }
     }

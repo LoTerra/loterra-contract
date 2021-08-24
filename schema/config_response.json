@@ -4,6 +4,7 @@
   "type": "object",
   "required": [
     "admin",
+    "altered_contract_address",
     "block_time_play",
     "combination_len",
     "denom_stable",
@@ -24,6 +25,9 @@
   ],
   "properties": {
     "admin": {
+      "$ref": "#/definitions/CanonicalAddr"
+    },
+    "altered_contract_address": {
       "$ref": "#/definitions/CanonicalAddr"
     },
     "block_time_play": {
