@@ -39,6 +39,7 @@ thiserror = { version = "1.0.23" }
 hex = "0.4.2"
 terra-cosmwasm = { version = "1.2" }
 cw20 = { version = "0.2.3" }
+cw0 = { version = "0.2.3" }
 
 [dev-dependencies]
 cosmwasm-schema = { version = "0.10.1" }

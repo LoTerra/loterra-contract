@@ -1,7 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{CanonicalAddr, HumanAddr, Order, StdResult, Storage, Uint128};
+use cosmwasm_std::{CanonicalAddr, HumanAddr, Order, ReadonlyStorage, StdResult, Storage, Uint128};
 use cosmwasm_storage::{
     bucket, bucket_read, singleton, singleton_read, Bucket, ReadonlyBucket, ReadonlySingleton,
     Singleton,
@@ -19,6 +19,7 @@ const PLAYER_COUNT_KEY: &[u8] = b"player";
 const TICKET_COUNT_KEY: &[u8] = b"ticket";
 const JACKPOT_KEY: &[u8] = b"jackpot";
 const PLAYERS_KEY: &[u8] = b"players";
+const ADDRESS_KEY: &[u8] = b"address";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
@@ -118,6 +119,13 @@ pub fn combination_save<T: Storage>(
             }
         },
     )?;
+    match address_players_read(storage).may_load(&address.as_slice())? {
+        None => {
+            address_players(storage).save(&address.as_slice(), &true)?;
+        }
+        Some(_) => {}
+    };
+
     if !exist {
         all_players_storage(storage).update(&lottery_id.to_be_bytes(), |exist| match exist {
             None => Ok(vec![address]),
@@ -134,6 +142,7 @@ pub fn combination_save<T: Storage>(
             })
             .map(|_| ())?
     }
+
     count_total_ticket_by_lottery(storage)
         .update(&lottery_id.to_be_bytes(), |exists| match exists {
             None => Ok(Uint128(combination.len() as u128)),
@@ -285,4 +294,14 @@ pub fn all_players_storage<T: Storage>(storage: &mut T) -> Bucket<T, Vec<Canonic
 }
 pub fn all_players_storage_read<T: Storage>(storage: &T) -> ReadonlyBucket<T, Vec<CanonicalAddr>> {
     bucket_read(PLAYERS_KEY, storage)
+}
+
+/// Get all players
+pub fn address_players<S: Storage>(storage: &mut S) -> Bucket<S, bool> {
+    bucket(ADDRESS_KEY, storage)
+}
+
+/// Read all players
+pub fn address_players_read<S: ReadonlyStorage>(storage: &S) -> ReadonlyBucket<S, bool> {
+    bucket_read(ADDRESS_KEY, storage)
 }

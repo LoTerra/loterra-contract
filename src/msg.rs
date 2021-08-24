@@ -77,6 +77,11 @@ pub enum QueryMsg {
     Jackpot { lottery_id: u64 },
     /// Get all players by lottery id
     Players { lottery_id: u64 },
+    /// Get all players
+    AllPlayers {
+        start_after: Option<HumanAddr>,
+        limit: Option<u32>,
+    },
     /// Get the needed round for workers adding randomness to Terrand
     GetRound {},
     /// Query Terrand smart contract to get the needed randomness to play the lottery

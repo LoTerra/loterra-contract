@@ -7,8 +7,8 @@ use crate::msg::{
     InitMsg, QueryMsg, RoundResponse, WinnerResponse,
 };
 use crate::state::{
-    all_players_storage_read, all_winners, combination_save, config, config_read,
-    count_player_by_lottery_read, count_total_ticket_by_lottery_read, jackpot_storage,
+    address_players_read, all_players_storage_read, all_winners, combination_save, config,
+    config_read, count_player_by_lottery_read, count_total_ticket_by_lottery_read, jackpot_storage,
     jackpot_storage_read, lottery_winning_combination_storage,
     lottery_winning_combination_storage_read, poll_storage, poll_storage_read, poll_vote_storage,
     save_winner, user_combination_bucket_read, winner_count_by_rank_read, winner_storage,
@@ -17,8 +17,10 @@ use crate::state::{
 use crate::taxation::deduct_tax;
 use cosmwasm_std::{
     to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Env, Extern, HandleResponse,
-    HumanAddr, InitResponse, LogAttribute, Querier, StdError, StdResult, Storage, Uint128, WasmMsg,
+    HumanAddr, InitResponse, LogAttribute, Order, Querier, StdError, StdResult, Storage, Uint128,
+    WasmMsg,
 };
+use cw0::calc_range_start_human;
 use cw20::Cw20HandleMsg;
 use std::ops::{Add, Mul, Sub};
 
@@ -1253,7 +1255,12 @@ pub fn query<S: Storage, A: Api, Q: Querier>(
             to_binary(&query_winner_rank(deps, lottery_id, rank)?)?
         }
         QueryMsg::Jackpot { lottery_id } => to_binary(&query_jackpot(deps, lottery_id)?)?,
-        QueryMsg::Players { lottery_id } => to_binary(&query_all_players(deps, lottery_id)?)?,
+        QueryMsg::Players { lottery_id } => {
+            to_binary(&query_all_players_by_lottery(deps, lottery_id)?)?
+        }
+        QueryMsg::AllPlayers { start_after, limit } => {
+            to_binary(&query_all_players(deps, start_after, limit)?)?
+        }
         _ => to_binary(&())?,
     };
     Ok(response)
@@ -1278,7 +1285,30 @@ fn query_winner_rank<S: Storage, A: Api, Q: Querier>(
     Ok(amount)
 }
 
+// settings for pagination
+const MAX_LIMIT: u32 = 30;
+const DEFAULT_LIMIT: u32 = 10;
 fn query_all_players<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    start_after: Option<HumanAddr>,
+    limit: Option<u32>,
+) -> StdResult<Vec<HumanAddr>> {
+    let limit = limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize;
+    let start = calc_range_start_human(deps.api, start_after)?;
+
+    let all_players: StdResult<Vec<_>> = address_players_read(&deps.storage)
+        .range(start.as_deref(), None, Order::Ascending)
+        .take(limit)
+        .map(|elem| {
+            let (k, _) = elem?;
+            let address: HumanAddr = deps.api.human_address(&CanonicalAddr::from(k))?;
+            Ok(address)
+        })
+        .collect();
+
+    Ok(all_players?)
+}
+fn query_all_players_by_lottery<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     lottery_id: u64,
 ) -> StdResult<Vec<HumanAddr>> {
@@ -1297,6 +1327,7 @@ fn query_all_players<S: Storage, A: Api, Q: Querier>(
         };
     Ok(players)
 }
+
 fn query_jackpot<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     lottery_id: u64,

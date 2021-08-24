@@ -223,6 +223,38 @@
       }
     },
     {
+      "description": "Get all players",
+      "type": "object",
+      "required": [
+        "all_players"
+      ],
+      "properties": {
+        "all_players": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "start_after": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/HumanAddr"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
       "description": "Get the needed round for workers adding randomness to Terrand",
       "type": "object",
       "required": [
