@@ -243,9 +243,7 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
             ))
             .into();
             // Bonus amount
-            let bonus: Uint128 = Uint128(
-                state.price_per_ticket_to_register.clone().u128() * combination.len() as u128,
-            )
+            let bonus: Uint128 = bonus_burn
             .multiply_ratio(Uint128(state.bonus as u128), Uint128(100));
             // Verify if player is sending correct amount
             if sent.u128()
