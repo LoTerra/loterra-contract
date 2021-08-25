@@ -32,6 +32,7 @@ const MIN_DESCRIPTION_LEN: u64 = 6;
 const HOLDERS_MAX_REWARD: u8 = 100;
 const WORKER_MAX_REWARD: u8 = 10;
 const DIV_BLOCK_TIME_BY_X: u64 = 2;
+const BONUS_MAX: u8 = 100;
 // Note, you can use StdResult in some functions where you do not
 // make use of the custom errors
 // #[serde(rename_all = "snake_case")]
@@ -64,6 +65,8 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         safe_lock: false,
         lottery_counter: 1,
         holders_bonus_block_time_end: msg.holders_bonus_block_time_end,
+        bonus_burn_rate: 10,
+        bonus: 0,
     };
 
     config(&mut deps.storage).save(&state)?;
@@ -227,17 +230,23 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
             }
         }
         Some(_) => {
+            if Uint128(state.bonus_burn_rate as u128).is_zero() {
+                return Err(StdError::generic_err("Altered bonus disabled"));
+            }
             // Ratio is a decimal 0.5
             let bonus_burn: Uint128 = Uint128(
                 state.price_per_ticket_to_register.clone().u128() * combination.len() as u128,
             )
-            .mul(Decimal::from_ratio(Uint128(1), Uint128(3)))
+            .mul(Decimal::from_ratio(
+                Uint128(1),
+                Uint128(state.bonus_burn_rate as u128),
+            ))
             .into();
             // Bonus amount
             let bonus: Uint128 = Uint128(
                 state.price_per_ticket_to_register.clone().u128() * combination.len() as u128,
             )
-            .multiply_ratio(Uint128(5), Uint128(100));
+            .multiply_ratio(Uint128(state.bonus as u128), Uint128(100));
             // Verify if player is sending correct amount
             if sent.u128()
                 != Uint128(
@@ -814,6 +823,32 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
             }
         }
         Proposal::AmountToRegister
+    } else if let Proposal::Bonus = proposal {
+        match amount {
+            Some(bonus_amount) => {
+                if bonus_amount.u128() as u8 > BONUS_MAX {
+                    return Err(StdError::generic_err("Amount between 0 to 100".to_string()));
+                }
+                proposal_amount = bonus_amount;
+            }
+            None => {
+                return Err(StdError::generic_err("Amount is required".to_string()));
+            }
+        }
+        Proposal::Bonus
+    } else if let Proposal::BonusBurnRate = proposal {
+        match amount {
+            Some(bonus_burn_amount) => {
+                if bonus_burn_amount.u128() as u8 > BONUS_MAX {
+                    return Err(StdError::generic_err("Amount between 0 to 100".to_string()));
+                }
+                proposal_amount = bonus_burn_amount;
+            }
+            None => {
+                return Err(StdError::generic_err("Amount is required".to_string()));
+            }
+        }
+        Proposal::BonusBurnRate
     } else if let Proposal::SecurityMigration = proposal {
         match recipient {
             Some(migration_address) => {
@@ -1139,6 +1174,12 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
         }
         Proposal::PrizePerRank => {
             state.prize_rank_winner_percentage = store.prize_rank;
+        }
+        Proposal::Bonus => {
+            state.bonus = store.amount.u128() as u8;
+        }
+        Proposal::BonusBurnRate => {
+            state.bonus_burn_rate = store.amount.u128() as u8;
         }
         Proposal::HolderFeePercentage => {
             state.token_holder_percentage_fee_reward = store.amount.u128() as u8
@@ -2170,7 +2211,7 @@ mod tests {
             };
             let burn = Cw20HandleMsg::BurnFrom {
                 owner: before_all.default_sender.clone(),
-                amount: Uint128(8499999),
+                amount: Uint128(3000000),
             };
             let res = handle(
                 &mut deps,
@@ -2178,7 +2219,7 @@ mod tests {
                     before_all.default_sender.clone(),
                     &[Coin {
                         denom: "ust".to_string(),
-                        amount: Uint128(20_000_001),
+                        amount: Uint128(27_000_000),
                     }],
                 ),
                 msg.clone(),

@@ -42,6 +42,8 @@ pub struct State {
     pub safe_lock: bool,
     pub lottery_counter: u64,
     pub holders_bonus_block_time_end: u64,
+    pub bonus_burn_rate: u8,
+    pub bonus: u8,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -64,6 +66,8 @@ pub enum Proposal {
     DaoFunding,
     StakingContractMigration,
     PollSurvey,
+    BonusBurnRate,
+    Bonus,
     // test purpose
     NotExist,
 }
