@@ -6,6 +6,8 @@
     "admin",
     "altered_contract_address",
     "block_time_play",
+    "bonus",
+    "bonus_burn_rate",
     "combination_len",
     "denom_stable",
     "every_block_time_play",
@@ -33,6 +35,16 @@
     "block_time_play": {
       "type": "integer",
       "format": "uint64",
+      "minimum": 0.0
+    },
+    "bonus": {
+      "type": "integer",
+      "format": "uint8",
+      "minimum": 0.0
+    },
+    "bonus_burn_rate": {
+      "type": "integer",
+      "format": "uint8",
       "minimum": 0.0
     },
     "combination_len": {

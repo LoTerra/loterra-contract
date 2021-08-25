@@ -103,6 +103,8 @@
         "DaoFunding",
         "StakingContractMigration",
         "PollSurvey",
+        "BonusBurnRate",
+        "Bonus",
         "NotExist"
       ]
     },
