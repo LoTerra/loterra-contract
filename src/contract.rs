@@ -1691,6 +1691,7 @@ mod tests {
                     "12345f".to_string(),
                     "1234a6".to_string(),
                     "000000".to_string(),
+                    "023456".to_string(),
                 ],
             )
             .unwrap();
