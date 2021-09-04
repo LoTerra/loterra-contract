@@ -1745,7 +1745,7 @@ mod tests {
             assert_eq!(winners.ranks.len(), 3);
             assert_eq!(winners.ranks[0], 1);
             assert_eq!(winners.ranks[1], 2);
-            assert_eq!(winners.ranks[2], 2);
+            assert_eq!(winners.ranks[2], 3);
         }
     }
     mod register {

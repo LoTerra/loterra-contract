@@ -10,10 +10,9 @@ pub fn count_match(x: &str, y: &str) -> usize {
     for i in 0..y.len() {
         if x.chars().nth(i).unwrap() == y.chars().nth(i).unwrap() {
             count += 1;
-        }
-        /*else{
+        } else {
             break;
-        } */
+        }
     }
     count
 }
