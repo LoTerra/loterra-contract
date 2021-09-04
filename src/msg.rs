@@ -153,3 +153,7 @@ pub type RoundResponse = Round;
 
 // We define a custom struct for each query response
 pub type ConfigResponse = State;
+
+/// We currently take no arguments for migrations
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct MigrateMsg {}

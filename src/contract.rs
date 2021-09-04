@@ -4,7 +4,7 @@ use crate::helpers::{
 };
 use crate::msg::{
     AllCombinationResponse, AllWinnersResponse, ConfigResponse, GetPollResponse, HandleMsg,
-    InitMsg, QueryMsg, RoundResponse, WinnerResponse,
+    InitMsg, MigrateMsg, QueryMsg, RoundResponse, WinnerResponse,
 };
 use crate::state::{
     address_players_read, all_players_storage_read, all_winners, combination_save, config,
@@ -17,8 +17,8 @@ use crate::state::{
 use crate::taxation::deduct_tax;
 use cosmwasm_std::{
     to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Env, Extern, HandleResponse,
-    HumanAddr, InitResponse, LogAttribute, Order, Querier, StdError, StdResult, Storage, Uint128,
-    WasmMsg,
+    HumanAddr, InitResponse, LogAttribute, MigrateResponse, Order, Querier, StdError, StdResult,
+    Storage, Uint128, WasmMsg,
 };
 use cw0::calc_range_start_human;
 use cw20::Cw20HandleMsg;
@@ -1495,6 +1495,14 @@ fn query_round<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>) -> StdRes
     let next_round = (from_genesis / DRAND_PERIOD) + DRAND_NEXT_ROUND_SECURITY;
 
     Ok(RoundResponse { next_round })
+}
+
+pub fn migrate<S: Storage, A: Api, Q: Querier>(
+    _deps: &mut Extern<S, A, Q>,
+    _env: Env,
+    _msg: MigrateMsg,
+) -> StdResult<MigrateResponse> {
+    Ok(MigrateResponse::default())
 }
 
 #[cfg(test)]
