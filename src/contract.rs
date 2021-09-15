@@ -51,7 +51,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         jackpot_percentage_reward: 20,
         token_holder_percentage_fee_reward: 50,
         fee_for_drand_worker_in_percentage: 1,
-        prize_rank_winner_percentage: vec![87, 10, 2, 1],
+        prize_rank_winner_percentage: vec![87, 10, 2, 1, 1, 1],
         poll_count: 0,
         price_per_ticket_to_register: Uint128(1_000_000),
         terrand_contract_address: deps.api.canonical_address(&msg.terrand_contract_address)?,
@@ -500,6 +500,8 @@ pub fn handle_claim<S: Storage, A: Api, Q: Querier>(
                         count if count == lottery_winning_combination.len() - 1 => 2,
                         count if count == lottery_winning_combination.len() - 2 => 3,
                         count if count == lottery_winning_combination.len() - 3 => 4,
+                        count if count == lottery_winning_combination.len() - 4 => 5,
+                        count if count == lottery_winning_combination.len() - 5 => 6,
                         _ => 0,
                     } as u8;
 
