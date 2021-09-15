@@ -240,8 +240,7 @@ pub fn handle_register<S: Storage, A: Api, Q: Querier>(
             .mul(Decimal::from_ratio(
                 Uint128(state.bonus_burn_rate as u128),
                 Uint128(100),
-            ))
-            .into();
+            ));
             // Bonus amount
             let bonus: Uint128 =
                 bonus_burn.multiply_ratio(Uint128(state.bonus as u128), Uint128(100));
