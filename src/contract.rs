@@ -784,9 +784,9 @@ pub fn handle_proposal<S: Storage, A: Api, Q: Querier>(
     } else if let Proposal::PrizePerRank = proposal {
         match prize_per_rank {
             Some(ranks) => {
-                if ranks.len() != 4 {
+                if ranks.len() != 6 {
                     return Err(StdError::generic_err(
-                        "Ranks need to be in this format [0, 90, 10, 0] numbers between 0 to 100"
+                        "Ranks need to be in this format [0, 90, 10, 0, 0, 0] numbers between 0 to 100"
                             .to_string(),
                     ));
                 }
@@ -1500,10 +1500,13 @@ fn query_round<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>) -> StdRes
 }
 
 pub fn migrate<S: Storage, A: Api, Q: Querier>(
-    _deps: &mut Extern<S, A, Q>,
+    deps: &mut Extern<S, A, Q>,
     _env: Env,
     _msg: MigrateMsg,
 ) -> StdResult<MigrateResponse> {
+    let mut state = config_read(&deps.storage).load()?;
+    state.prize_rank_winner_percentage = vec![0, 89, 7, 2, 1, 1];
+    config(&mut deps.storage).save(&state)?;
     Ok(MigrateResponse::default())
 }
 
@@ -1702,6 +1705,9 @@ mod tests {
                     "1234a6".to_string(),
                     "000000".to_string(),
                     "023456".to_string(),
+                    "100000".to_string(),
+                    "120000".to_string(),
+                    "123000".to_string(),
                 ],
             )
             .unwrap();
@@ -1752,10 +1758,13 @@ mod tests {
                 .unwrap();
             println!("{:?}", winners);
             assert!(!winners.claimed);
-            assert_eq!(winners.ranks.len(), 3);
+            assert_eq!(winners.ranks.len(), 6);
             assert_eq!(winners.ranks[0], 1);
             assert_eq!(winners.ranks[1], 2);
             assert_eq!(winners.ranks[2], 3);
+            assert_eq!(winners.ranks[3], 6);
+            assert_eq!(winners.ranks[4], 5);
+            assert_eq!(winners.ranks[5], 4);
         }
     }
     mod register {
@@ -2907,9 +2916,13 @@ mod tests {
                 .api
                 .canonical_address(&before_all.default_sender)
                 .unwrap();
-
+            let addr3 = deps
+                .api
+                .canonical_address(&HumanAddr("address3".to_string()))
+                .unwrap();
             save_winner(&mut deps.storage, 1u64, addr2.clone(), 1).unwrap();
             save_winner(&mut deps.storage, 1u64, default_addr.clone(), 1).unwrap();
+            save_winner(&mut deps.storage, 1u64, addr3.clone(), 6).unwrap();
 
             let mut env = mock_env(before_all.default_sender.clone(), &[]);
             env.block.time = state_before.block_time_play - state_before.every_block_time_play / 2;
@@ -2979,6 +2992,13 @@ mod tests {
                 .load(&(state_after.lottery_counter - 1).to_be_bytes())
                 .unwrap();
             assert_eq!(state_after, state_before);
+
+            let mut env = mock_env(HumanAddr("address3".to_string()), &[]);
+            env.block.time = state_before.block_time_play - state_before.every_block_time_play / 2;
+            let msg = HandleMsg::Collect { address: None };
+            let res = handle(&mut deps, env.clone(), msg).unwrap();
+            println!("{:?}", res);
+            assert_eq!(res.messages.len(), 2);
         }
         #[test]
         fn success_collecting_for_someone() {
@@ -3321,7 +3341,7 @@ mod tests {
                 description: "This is my first proposal".to_string(),
                 proposal,
                 amount: None,
-                prize_per_rank: Option::from(vec![10, 20, 23, 23, 23, 23]),
+                prize_per_rank: Option::from(vec![10, 20, 23, 23, 23, 23, 23]),
                 recipient: None,
             }
         }
@@ -3331,7 +3351,7 @@ mod tests {
                 description: "This is my first proposal".to_string(),
                 proposal,
                 amount: None,
-                prize_per_rank: Option::from(vec![100, 20, 23, 23]),
+                prize_per_rank: Option::from(vec![100, 20, 23, 23, 0, 0]),
                 recipient: None,
             }
         }
@@ -3488,7 +3508,7 @@ mod tests {
                     backtrace: None,
                 }) => assert_eq!(
                     msg,
-                    "Ranks need to be in this format [0, 90, 10, 0] numbers between 0 to 100"
+                    "Ranks need to be in this format [0, 90, 10, 0, 0, 0] numbers between 0 to 100"
                 ),
                 _ => panic!("Unexpected error"),
             }
@@ -3555,7 +3575,7 @@ mod tests {
             let msg_prize_rank = msg_constructor_success(
                 Proposal::PrizePerRank,
                 None,
-                Option::from(vec![10, 10, 10, 70]),
+                Option::from(vec![10, 10, 10, 70, 0, 0]),
                 None,
             );
             let msg_jackpot_reward_percentage = msg_constructor_success(
