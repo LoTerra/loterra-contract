@@ -15,11 +15,7 @@ use crate::state::{
     winner_storage_read, PollInfoState, PollStatus, Proposal, State,
 };
 use crate::taxation::deduct_tax;
-use cosmwasm_std::{
-    to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Env, Extern, HandleResponse,
-    HumanAddr, InitResponse, LogAttribute, MigrateResponse, Order, Querier, StdError, StdResult,
-    Storage, Uint128, WasmMsg,
-};
+use cosmwasm_std::{to_binary, Api, BankMsg, Binary, CanonicalAddr, Coin, Decimal, Env, Extern, HandleResponse, HumanAddr, InitResponse, LogAttribute, MigrateResponse, Order, Querier, StdError, StdResult, Storage, Uint128, WasmMsg, Response, MessageInfo, DepsMut, Deps};
 use cw0::calc_range_start_human;
 use cw20::Cw20HandleMsg;
 use std::ops::{Add, Mul, Sub};
@@ -36,11 +32,13 @@ const BONUS_MAX: u8 = 100;
 // Note, you can use StdResult in some functions where you do not
 // make use of the custom errors
 // #[serde(rename_all = "snake_case")]
-pub fn init<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn instantiate(
+    deps: DepsMut,
     env: Env,
-    msg: InitMsg,
-) -> StdResult<InitResponse> {
+    info: MessageInfo,
+    msg: InstantiateMsg,
+) -> StdResult<Response> {
     let state = State {
         admin: deps.api.canonical_address(&env.message.sender)?,
         block_time_play: msg.block_time_play,
@@ -74,11 +72,8 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
 }
 
 // And declare a custom Error variant for the ones where you will want to make use of it
-pub fn handle<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    env: Env,
-    msg: HandleMsg,
-) -> StdResult<HandleResponse> {
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> StdResult<Response> {
     match msg {
         HandleMsg::Register {
             address,
@@ -1272,11 +1267,8 @@ pub fn handle_present_proposal<S: Storage, A: Api, Q: Querier>(
         data: None,
     })
 }
-
-pub fn query<S: Storage, A: Api, Q: Querier>(
-    deps: &Extern<S, A, Q>,
-    msg: QueryMsg,
-) -> StdResult<Binary> {
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     let response = match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?)?,
         QueryMsg::Combination {
@@ -1498,14 +1490,8 @@ fn query_round<S: Storage, A: Api, Q: Querier>(deps: &Extern<S, A, Q>) -> StdRes
     Ok(RoundResponse { next_round })
 }
 
-pub fn migrate<S: Storage, A: Api, Q: Querier>(
-    deps: &mut Extern<S, A, Q>,
-    _env: Env,
-    _msg: MigrateMsg,
-) -> StdResult<MigrateResponse> {
-    let mut state = config_read(&deps.storage).load()?;
-    state.prize_rank_winner_percentage = vec![0, 89, 7, 2, 1, 1];
-    config(&mut deps.storage).save(&state)?;
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
     Ok(MigrateResponse::default())
 }
 
