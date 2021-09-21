@@ -1,8 +1,8 @@
-use crate::state::{PollStatus, Proposal, State, WinnerRewardClaims};
+use crate::state::{PollStatus, Proposal, WinnerRewardClaims, Config};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{Decimal, HumanAddr, Uint128};
+use cosmwasm_std::{Decimal, Addr, Uint128};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InitMsg {
@@ -10,28 +10,28 @@ pub struct InitMsg {
     pub block_time_play: u64,
     pub every_block_time_play: u64,
     pub poll_default_end_height: u64,
-    pub terrand_contract_address: HumanAddr,
-    pub loterra_cw20_contract_address: HumanAddr,
-    pub loterra_staking_contract_address: HumanAddr,
-    pub altered_contract_address: HumanAddr,
+    pub terrand_contract_address: Addr,
+    pub loterra_cw20_contract_address: Addr,
+    pub loterra_staking_contract_address: Addr,
+    pub altered_contract_address: Addr,
     pub holders_bonus_block_time_end: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-pub enum HandleMsg {
+pub enum ExecuteMsg {
     /// Registering to the lottery
     Register {
-        address: Option<HumanAddr>,
+        address: Option<Addr>,
         altered_bonus: Option<bool>,
         combination: Vec<String>,
     },
     /// Run the lottery
     Play {},
     /// Claim jackpot
-    Claim { addresses: Option<Vec<HumanAddr>> },
+    Claim { addresses: Option<Vec<Addr>> },
     /// Collect jackpot
-    Collect { address: Option<HumanAddr> },
+    Collect { address: Option<Addr> },
     /// DAO
     /// Make a proposal
     Poll {
@@ -39,7 +39,7 @@ pub enum HandleMsg {
         proposal: Proposal,
         amount: Option<Uint128>,
         prize_per_rank: Option<Vec<u8>>,
-        recipient: Option<HumanAddr>,
+        recipient: Option<Addr>,
     },
     /// Vote the proposal
     Vote { poll_id: u64, approve: bool },
@@ -60,7 +60,7 @@ pub enum QueryMsg {
     /// Get the config state
     Config {},
     /// Combination lottery numbers and address
-    Combination { lottery_id: u64, address: HumanAddr },
+    Combination { lottery_id: u64, address: Addr },
     /// Winner lottery rank and address
     Winner { lottery_id: u64 },
     /// Get specific poll
@@ -79,7 +79,7 @@ pub enum QueryMsg {
     Players { lottery_id: u64 },
     /// Get all players
     AllPlayers {
-        start_after: Option<HumanAddr>,
+        start_after: Option<Addr>,
         limit: Option<u32>,
     },
     /// Get the needed round for workers adding randomness to Terrand
@@ -88,14 +88,14 @@ pub enum QueryMsg {
     GetRandomness { round: u64 },
     /// Not used to be called directly
     /// Query Loterra smart contract to get the balance
-    Balance { address: HumanAddr },
+    Balance { address: Addr },
     /// Get specific holder, address and balance from loterra staking contract
-    Holder { address: HumanAddr },
+    Holder { address: Addr },
     /// Get all holders from loterra staking contract
     Holders {},
     /// Query Loterra send
     Transfer {
-        recipient: HumanAddr,
+        recipient: Addr,
         amount: Uint128,
     },
     /// Update balance of the staking contract with rewards
@@ -118,7 +118,7 @@ pub struct AllCombinationResponse {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct WinnerResponse {
-    pub address: HumanAddr,
+    pub address: Addr,
     pub claims: WinnerRewardClaims,
 }
 
@@ -129,14 +129,14 @@ pub struct AllWinnersResponse {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct GetPollResponse {
-    pub creator: HumanAddr,
+    pub creator: Addr,
     pub status: PollStatus,
     pub end_height: u64,
     pub start_height: u64,
     pub description: String,
     pub amount: Uint128,
     pub prize_per_rank: Vec<u8>,
-    pub migration_address: Option<HumanAddr>,
+    pub migration_address: Option<Addr>,
     pub weight_yes_vote: Uint128,
     pub weight_no_vote: Uint128,
     pub yes_vote: u64,
@@ -152,7 +152,7 @@ pub struct Round {
 pub type RoundResponse = Round;
 
 // We define a custom struct for each query response
-pub type ConfigResponse = State;
+pub type ConfigResponse = Config;
 
 /// We currently take no arguments for migrations
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
