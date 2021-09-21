@@ -2,20 +2,20 @@ use crate::msg::StakingStateResponse;
 use crate::query::{GetHoldersResponse, HoldersInfo};
 use cosmwasm_std::testing::{MockApi, MockQuerier, MockStorage, MOCK_CONTRACT_ADDR};
 use cosmwasm_std::{
-    from_slice, to_binary, Binary, Coin, Decimal, Addr, Querier,
-    QuerierResult, QueryRequest, SystemError, Uint128, WasmQuery, OwnedDeps, SystemResult, ContractResult
+    from_slice, to_binary, Addr, Binary, Coin, ContractResult, Decimal, OwnedDeps, Querier,
+    QuerierResult, QueryRequest, SystemError, SystemResult, Uint128, WasmQuery,
 };
 use serde::Serialize;
 use terra_cosmwasm::{TaxCapResponse, TaxRateResponse, TerraQuery, TerraQueryWrapper};
 
-pub fn mock_dependencies_custom(    
+pub fn mock_dependencies_custom(
     contract_balance: &[Coin],
 ) -> OwnedDeps<MockStorage, MockApi, WasmMockQuerier> {
-    
     let contract_addr = Addr::unchecked(MOCK_CONTRACT_ADDR);
-    let custom_querier: WasmMockQuerier = WasmMockQuerier::new(
-        MockQuerier::new(&[(&contract_addr.to_string(), contract_balance)]),        
-    );    
+    let custom_querier: WasmMockQuerier = WasmMockQuerier::new(MockQuerier::new(&[(
+        &contract_addr.to_string(),
+        contract_balance,
+    )]));
     OwnedDeps {
         storage: MockStorage::default(),
         api: MockApi::default(),
@@ -77,12 +77,7 @@ pub struct GetHolderResponse {
 }
 
 impl GetHolderResponse {
-    pub fn new(
-        address: Addr,
-        balance: Uint128,
-        index: Decimal,
-        pending_rewards: Decimal,
-    ) -> Self {
+    pub fn new(address: Addr, balance: Uint128, index: Decimal, pending_rewards: Decimal) -> Self {
         GetHolderResponse {
             address,
             balance,
@@ -91,7 +86,7 @@ impl GetHolderResponse {
         }
     }
 
-    pub fn default() -> Self{
+    pub fn default() -> Self {
         GetHolderResponse {
             address: Addr::unchecked(""),
             balance: Uint128::from(0u128),
@@ -145,7 +140,9 @@ impl WasmMockQuerier {
                         let msg_balance = GetAllBondedResponse {
                             total_bonded: self.lottery_balance_response.balance.clone(),
                         };
-                        return SystemResult::Ok(ContractResult::Ok(to_binary(&msg_balance).unwrap()));
+                        return SystemResult::Ok(ContractResult::Ok(
+                            to_binary(&msg_balance).unwrap(),
+                        ));
                     } else if msg == &Binary::from(
                         r#"{"holder":{"address":"terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007"}}"#
                             .as_bytes(),
@@ -158,7 +155,9 @@ impl WasmMockQuerier {
                             index: self.holder_response.index,
                             pending_rewards: self.holder_response.pending_rewards,
                         };
-                        return SystemResult::Ok(ContractResult::Ok(to_binary(&msg_balance).unwrap()));
+                        return SystemResult::Ok(ContractResult::Ok(
+                            to_binary(&msg_balance).unwrap(),
+                        ));
                     } else if msg == &Binary::from(r#"{"holders":{}}"#.as_bytes()) {
                         let msg_holders = GetHoldersResponse {
                             holders: vec![
@@ -176,7 +175,9 @@ impl WasmMockQuerier {
                                 },
                             ],
                         };
-                        return SystemResult::Ok(ContractResult::Ok(to_binary(&msg_holders).unwrap()));
+                        return SystemResult::Ok(ContractResult::Ok(
+                            to_binary(&msg_holders).unwrap(),
+                        ));
                     } else if msg == &Binary::from(
                         r#"{"holder":{"address":"terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20qu3k"}}"#
                             .as_bytes(),
@@ -189,19 +190,26 @@ impl WasmMockQuerier {
                             index: self.holder_response.index,
                             pending_rewards: self.holder_response.pending_rewards,
                         };
-                        return SystemResult::Ok(ContractResult::Ok(to_binary(&msg_balance).unwrap()));
+                        return SystemResult::Ok(ContractResult::Ok(
+                            to_binary(&msg_balance).unwrap(),
+                        ));
                     } else if msg == &Binary::from(r#"{"state":{}}"#.as_bytes()) {
                         let msg_balance = StakingStateResponse {
                             global_index: Decimal::percent(2),
                             total_balance: Uint128::from(1_000_000_000u128),
                             prev_reward_balance: Uint128::from(1_000_000_000u128),
                         };
-                        return SystemResult::Ok(ContractResult::Ok(to_binary(&msg_balance).unwrap()));
+                        return SystemResult::Ok(ContractResult::Ok(
+                            to_binary(&msg_balance).unwrap(),
+                        ));
                     }
                 }
                 panic!("DO NOT ENTER HERE")
             }
-            QueryRequest::Custom(TerraQueryWrapper { route:_, query_data }) => match query_data {
+            QueryRequest::Custom(TerraQueryWrapper {
+                route: _,
+                query_data,
+            }) => match query_data {
                 TerraQuery::TaxRate {} => {
                     let res = TaxRateResponse {
                         rate: Decimal::percent(1),
@@ -220,9 +228,7 @@ impl WasmMockQuerier {
     }
 }
 impl WasmMockQuerier {
-    pub fn new(
-        base: MockQuerier<TerraQueryWrapper>,        
-    ) -> Self {
+    pub fn new(base: MockQuerier<TerraQueryWrapper>) -> Self {
         WasmMockQuerier {
             base,
             // terrand_response: TerrandResponse::default(),

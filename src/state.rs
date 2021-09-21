@@ -1,10 +1,8 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{CanonicalAddr, Addr, Order, StdResult, Storage, Uint128, StdError};
-use cosmwasm_storage::{
-    bucket, bucket_read, Bucket, ReadonlyBucket,
-};
+use cosmwasm_std::{Addr, CanonicalAddr, Order, StdError, StdResult, Storage, Uint128};
+use cosmwasm_storage::{bucket, bucket_read, Bucket, ReadonlyBucket};
 use cw_storage_plus::Item;
 use std::ops::Add;
 
@@ -112,7 +110,7 @@ pub fn combination_save(
 ) -> StdResult<()> {
     let mut exist = true;
     // Save combination by senders
-    user_combination_bucket(storage, lottery_id).update::<_,StdError>(
+    user_combination_bucket(storage, lottery_id).update::<_, StdError>(
         address.as_slice(),
         |exists| match exists {
             Some(combinations) => {
@@ -134,16 +132,18 @@ pub fn combination_save(
     };
 
     if !exist {
-        all_players_storage(storage).update::<_,StdError>(&lottery_id.to_be_bytes(), |exist| match exist {
-            None => Ok(vec![address]),
-            Some(players) => {
-                let mut data = players;
-                data.push(address);
-                Ok(data)
+        all_players_storage(storage).update::<_, StdError>(&lottery_id.to_be_bytes(), |exist| {
+            match exist {
+                None => Ok(vec![address]),
+                Some(players) => {
+                    let mut data = players;
+                    data.push(address);
+                    Ok(data)
+                }
             }
         })?;
         count_player_by_lottery(storage)
-            .update::<_,StdError>(&lottery_id.to_be_bytes(), |exists| match exists {
+            .update::<_, StdError>(&lottery_id.to_be_bytes(), |exists| match exists {
                 None => Ok(Uint128::from(1 as u128)),
                 Some(p) => Ok(p.add(Uint128::from(1 as u128))),
             })
@@ -158,10 +158,7 @@ pub fn combination_save(
         .map(|_| ())
 }
 
-pub fn user_combination_bucket(
-    storage: &mut dyn Storage,
-    lottery_id: u64,
-) -> Bucket<Vec<String>> {
+pub fn user_combination_bucket(storage: &mut dyn Storage, lottery_id: u64) -> Bucket<Vec<String>> {
     Bucket::multilevel(storage, &[COMBINATION_KEY, &lottery_id.to_be_bytes()])
 }
 
@@ -192,10 +189,7 @@ pub fn count_total_ticket_by_lottery_read(storage: &dyn Storage) -> ReadonlyBuck
 
 // if an address won a lottery in this round, saved by rank
 // index address -> winner claim
-pub fn winner_storage(
-    storage: &mut dyn Storage,
-    lottery_id: u64,
-) -> Bucket<WinnerRewardClaims> {
+pub fn winner_storage(storage: &mut dyn Storage, lottery_id: u64) -> Bucket<WinnerRewardClaims> {
     Bucket::multilevel(storage, &[WINNER_KEY, &lottery_id.to_be_bytes()])
 }
 
@@ -213,18 +207,20 @@ pub fn save_winner(
     addr: CanonicalAddr,
     rank: u8,
 ) -> StdResult<()> {
-    winner_storage(storage, lottery_id).update::<_,StdError>(addr.as_slice(), |exists| match exists {
-        None => Ok(WinnerRewardClaims {
-            claimed: false,
-            ranks: vec![rank],
-        }),
-        Some(claims) => {
-            let mut ranks = claims.ranks;
-            ranks.push(rank);
-            Ok(WinnerRewardClaims {
+    winner_storage(storage, lottery_id).update::<_, StdError>(addr.as_slice(), |exists| {
+        match exists {
+            None => Ok(WinnerRewardClaims {
                 claimed: false,
-                ranks,
-            })
+                ranks: vec![rank],
+            }),
+            Some(claims) => {
+                let mut ranks = claims.ranks;
+                ranks.push(rank);
+                Ok(WinnerRewardClaims {
+                    claimed: false,
+                    ranks,
+                })
+            }
         }
     })?;
     winner_count_by_rank(storage, lottery_id)
@@ -282,9 +278,7 @@ pub fn lottery_winning_combination_storage(storage: &mut dyn Storage) -> Bucket<
     bucket(storage, WINNING_COMBINATION_KEY)
 }
 
-pub fn lottery_winning_combination_storage_read(
-    storage: &dyn Storage,
-) -> ReadonlyBucket<String> {
+pub fn lottery_winning_combination_storage_read(storage: &dyn Storage) -> ReadonlyBucket<String> {
     bucket_read(storage, WINNING_COMBINATION_KEY)
 }
 

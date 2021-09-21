@@ -1,8 +1,8 @@
-use crate::state::{PollStatus, Proposal, WinnerRewardClaims, Config};
+use crate::state::{Config, PollStatus, Proposal, WinnerRewardClaims};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{Decimal, Addr, Uint128};
+use cosmwasm_std::{Addr, Decimal, Uint128};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InitMsg {
@@ -94,10 +94,7 @@ pub enum QueryMsg {
     /// Get all holders from loterra staking contract
     Holders {},
     /// Query Loterra send
-    Transfer {
-        recipient: Addr,
-        amount: Uint128,
-    },
+    Transfer { recipient: Addr, amount: Uint128 },
     /// Update balance of the staking contract with rewards
     UpdateGlobalIndex {},
     /// Query staking contract
