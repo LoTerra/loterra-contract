@@ -279,7 +279,7 @@ fn execute_register(
                 msg: to_binary(&burn_msg)?,
                 funds: vec![],
             });
-            execute_msg.push(wasm_msg.into());
+            execute_msg.push(wasm_msg);
         }
     }
 
@@ -383,7 +383,7 @@ fn execute_play(deps: DepsMut, env: Env, info: MessageInfo) -> StdResult<Respons
             amount: vec![deduct_tax(
                 &deps.as_ref(),
                 Coin {
-                    denom: state.denom_stable.clone(),
+                    denom: state.denom_stable,
                     amount: fee_for_drand_worker,
                 },
             )?],
@@ -624,6 +624,7 @@ fn execute_collect(
         .add_attribute("collecting_jackpot_prize", "yes"))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn execute_proposal(
     deps: DepsMut,
     env: Env,
@@ -1222,7 +1223,7 @@ fn query_all_players(
         })
         .collect();
 
-    Ok(all_players?)
+    Ok(all_players.unwrap())
 }
 fn query_all_players_by_lottery(deps: Deps, lottery_id: u64) -> StdResult<Vec<Addr>> {
     let players =

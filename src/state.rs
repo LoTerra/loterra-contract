@@ -144,8 +144,8 @@ pub fn combination_save(
         })?;
         count_player_by_lottery(storage)
             .update::<_, StdError>(&lottery_id.to_be_bytes(), |exists| match exists {
-                None => Ok(Uint128::from(1 as u128)),
-                Some(p) => Ok(p.add(Uint128::from(1 as u128))),
+                None => Ok(Uint128::from(1_u128)),
+                Some(p) => Ok(p.add(Uint128::from(1_u128))),
             })
             .map(|_| ())?
     }
@@ -225,8 +225,8 @@ pub fn save_winner(
     })?;
     winner_count_by_rank(storage, lottery_id)
         .update(&rank.to_be_bytes(), |exists| match exists {
-            None => Ok(Uint128::from(1 as u128)),
-            Some(r) => Ok(r.add(Uint128::from(1 as u128))),
+            None => Ok(Uint128::from(1_u128)),
+            Some(r) => Ok(r.add(Uint128::from(1_u128))),
         })
         .map(|_| ())
 }

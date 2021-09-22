@@ -35,8 +35,7 @@ pub fn encode_msg_execute(msg: QueryMsg, address: Addr, coin: Vec<Coin>) -> StdR
         contract_addr: address.to_string(),
         msg: to_binary(&msg)?,
         funds: coin,
-    })
-    .into())
+    }))
 }
 pub fn encode_msg_query(msg: QueryMsg, address: Addr) -> StdResult<QueryRequest<Empty>> {
     Ok(WasmQuery::Smart {
