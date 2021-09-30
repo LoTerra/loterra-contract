@@ -4,7 +4,7 @@ use crate::helpers::{
 };
 use crate::msg::{
     AllCombinationResponse, AllWinnersResponse, ConfigResponse, ExecuteMsg, GetPollResponse,
-    InitMsg, QueryMsg, RoundResponse, WinnerResponse,
+    InitMsg, MigrateMsg, QueryMsg, RoundResponse, WinnerResponse,
 };
 use crate::state::{
     address_players_read, all_players_storage_read, all_winners, combination_save,
@@ -1350,16 +1350,16 @@ fn query_round(deps: Deps) -> StdResult<RoundResponse> {
     Ok(RoundResponse { next_round })
 }
 
-// pub fn migrate(
-//     deps: Deps,
-//     _env: Env,
-//     _msg: MigrateMsg,
-// ) -> StdResult<MigrateResponse> {
-//     let mut state = read_config(deps.storage)?;
-//     state.prize_rank_winner_percentage = vec![0, 89, 7, 2, 1, 1];
-//     store_config(deps.storage, &state)?;
-//     Ok(MigrateResponse::default())
-// }
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response> {
+    let mut config = read_config(deps.storage)?;
+    config.terrand_contract_address = deps
+        .api
+        .addr_canonicalize(&msg.terrand_address.to_string())?;
+    store_config(deps.storage, &config)?;
+
+    Ok(Response::default())
+}
 
 #[cfg(test)]
 mod tests {
