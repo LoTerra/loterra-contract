@@ -6,7 +6,7 @@ use cosmwasm_storage::{bucket, bucket_read, Bucket, ReadonlyBucket};
 use cw_storage_plus::Item;
 use std::ops::Add;
 
-pub static CONFIG_KEY: &[u8] = b"config";
+
 const COMBINATION_KEY: &[u8] = b"combination";
 const WINNER_KEY: &[u8] = b"winner";
 const WINNER_RANK_KEY: &[u8] = b"rank";
@@ -92,7 +92,7 @@ pub struct WinnerRewardClaims {
     pub ranks: Vec<u8>,
 }
 
-pub const CONFIG: Item<Config> = Item::new("config");
+pub const CONFIG: Item<Config> = Item::new("\u{0}\u{6}config");
 
 pub fn store_config(storage: &mut dyn Storage, config: &Config) -> StdResult<()> {
     CONFIG.save(storage, config)
