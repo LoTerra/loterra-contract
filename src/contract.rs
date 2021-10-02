@@ -37,6 +37,7 @@ const WORKER_MAX_REWARD: u8 = 10;
 const DIV_BLOCK_TIME_BY_X: u64 = 2;
 const BONUS_MAX: u8 = 100;
 
+
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
     deps: DepsMut,
@@ -1351,14 +1352,8 @@ fn query_round(deps: Deps) -> StdResult<RoundResponse> {
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response> {
-    let mut config = read_config(deps.storage)?;
-    config.terrand_contract_address = deps
-        .api
-        .addr_canonicalize(&msg.terrand_address.to_string())?;
-    store_config(deps.storage, &config)?;
-
-    Ok(Response::default())
+pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
+    Ok(MigrateResponse::default())
 }
 
 #[cfg(test)]
