@@ -6,7 +6,6 @@ use cosmwasm_storage::{bucket, bucket_read, Bucket, ReadonlyBucket};
 use cw_storage_plus::Item;
 use std::ops::Add;
 
-
 const COMBINATION_KEY: &[u8] = b"combination";
 const WINNER_KEY: &[u8] = b"winner";
 const WINNER_RANK_KEY: &[u8] = b"rank";
@@ -282,11 +281,16 @@ pub fn lottery_winning_combination_storage_read(storage: &dyn Storage) -> Readon
     bucket_read(storage, WINNING_COMBINATION_KEY)
 }
 
-pub fn jackpot_storage(storage: &mut dyn Storage) -> Bucket<Uint128> {
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct JackpotInfo {
+    pub ust: Uint128,
+    pub alte: Uint128,
+}
+pub fn jackpot_storage(storage: &mut dyn Storage) -> Bucket<JackpotInfo> {
     bucket(storage, JACKPOT_KEY)
 }
 
-pub fn jackpot_storage_read(storage: &dyn Storage) -> ReadonlyBucket<Uint128> {
+pub fn jackpot_storage_read(storage: &dyn Storage) -> ReadonlyBucket<JackpotInfo> {
     bucket_read(storage, JACKPOT_KEY)
 }
 

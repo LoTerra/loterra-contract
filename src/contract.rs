@@ -4,7 +4,7 @@ use crate::helpers::{
 };
 use crate::msg::{
     AllCombinationResponse, AllWinnersResponse, ConfigResponse, ExecuteMsg, GetPollResponse,
-    InitMsg, MigrateMsg, QueryMsg, RoundResponse, WinnerResponse,
+    InitMsg, JackpotResponse, MigrateMsg, QueryMsg, ReceiveMsg, RoundResponse, WinnerResponse,
 };
 use crate::state::{
     address_players_read, all_players_storage_read, all_winners, combination_save,
@@ -12,24 +12,24 @@ use crate::state::{
     jackpot_storage_read, lottery_winning_combination_storage,
     lottery_winning_combination_storage_read, poll_storage, poll_storage_read, poll_vote_storage,
     read_config, save_winner, store_config, user_combination_bucket_read,
-    winner_count_by_rank_read, winner_storage, winner_storage_read, Config, PollInfoState,
-    PollStatus, Proposal,
+    winner_count_by_rank_read, winner_storage, winner_storage_read, Config, JackpotInfo,
+    PollInfoState, PollStatus, Proposal,
 };
 use crate::taxation::deduct_tax;
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
-    to_binary, Addr, BankMsg, Binary, CanonicalAddr, Coin, CosmosMsg, Decimal, Deps, DepsMut, Env,
-    MessageInfo, Order, Response, StdError, StdResult, Uint128, WasmMsg,
+    from_binary, to_binary, Addr, BankMsg, Binary, CanonicalAddr, Coin, CosmosMsg, Decimal, Deps,
+    DepsMut, Env, MessageInfo, Order, Response, StdError, StdResult, Uint128, WasmMsg, WasmQuery,
 };
 use cw0::calc_range_start;
-use cw20::Cw20ExecuteMsg;
+use cw20::{BalanceResponse, Cw20ExecuteMsg, Cw20QueryMsg, Cw20ReceiveMsg};
 use std::ops::{Add, Mul, Sub};
 
 const DRAND_GENESIS_TIME: u64 = 1595431050;
 const DRAND_PERIOD: u64 = 30;
-const DRAND_NEXT_ROUND_SECURITY: u64 = 10;
+const DRAND_NEXT_ROUND_SECURITY: u64 = 3;
 const MAX_DESCRIPTION_LEN: u64 = 255;
 const MIN_DESCRIPTION_LEN: u64 = 6;
 const HOLDERS_MAX_REWARD: u8 = 100;
@@ -112,6 +112,7 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         ExecuteMsg::RejectPoll { poll_id } => execute_reject_proposal(deps, env, info, poll_id),
         ExecuteMsg::SafeLock {} => execute_safe_lock(deps, env, info),
         ExecuteMsg::Renounce {} => execute_renounce(deps, env, info),
+        ExecuteMsg::Receive(msg) => handle_receive(deps, env, info, msg),
     }
 }
 
@@ -145,6 +146,111 @@ fn execute_safe_lock(deps: DepsMut, _env: Env, info: MessageInfo) -> StdResult<R
     store_config(deps.storage, &state)?;
 
     Ok(Response::default())
+}
+pub fn handle_receive(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    wrapper: Cw20ReceiveMsg,
+) -> StdResult<Response> {
+    let state = read_config(deps.storage)?;
+
+    // only loterra cw20 contract can send receieve msg
+    if info.sender != deps.api.addr_humanize(&state.altered_contract_address)? {
+        return Err(StdError::generic_err(
+            "only altered contract can send receive messages",
+        ));
+    }
+
+    let msg: ReceiveMsg = from_binary(&wrapper.msg)?;
+    match msg {
+        ReceiveMsg::RegisterAlte {
+            gift_address,
+            combination,
+        } => execute_register_alte(
+            deps,
+            env,
+            info,
+            wrapper.sender,
+            gift_address,
+            combination,
+            wrapper.amount,
+        ),
+    }
+}
+fn execute_register_alte(
+    deps: DepsMut,
+    env: Env,
+    _info: MessageInfo,
+    address: String,
+    gift_address: Option<String>,
+    combination: Vec<String>,
+    amount: Uint128,
+) -> StdResult<Response> {
+    let state = read_config(deps.storage)?;
+    if state.safe_lock {
+        return Err(StdError::generic_err(
+            "Contract deactivated for update or/and preventing security issue",
+        ));
+    }
+    // Check if the lottery is about to play and cancel new ticket to enter until play
+    if env.block.time.seconds() > state.block_time_play {
+        return Err(StdError::generic_err(
+            "Lottery is about to start wait until the end before register",
+        ));
+    }
+    // Check if address filled as param
+    let addr = match gift_address {
+        None => address,
+        Some(addr) => addr,
+    };
+
+    for combo in combination.clone() {
+        // Regex to check if the combination is allowed
+        if !is_lower_hex(&combo, state.combination_len) {
+            return Err(StdError::generic_err(format!(
+                "Not authorized use combination of [a-f] and [0-9] with length {}",
+                state.combination_len
+            )));
+        }
+    }
+
+    if amount.is_zero() {
+        return Err(StdError::generic_err(format!(
+            "you need to send {}ALTE per combination in order to register",
+            state.price_per_ticket_to_register.clone()
+        )));
+    }
+
+    // Ratio is a decimal 0.5
+    let bonus_burn: Uint128 = Uint128::from(
+        state.price_per_ticket_to_register.clone().u128() * combination.len() as u128,
+    )
+    .mul(Decimal::from_ratio(
+        Uint128::from(state.bonus_burn_rate as u128),
+        Uint128::from(100u128),
+    ));
+    // Bonus amount
+    let bonus: Uint128 =
+        bonus_burn.multiply_ratio(Uint128::from(state.bonus as u128), Uint128::from(100u128));
+
+    // Handle the player is not sending too much or too less
+    if amount.checked_sub(bonus)?.u128()
+        != state.price_per_ticket_to_register.u128() * combination.len() as u128
+    {
+        return Err(StdError::generic_err(format!(
+            "send {}ALTE",
+            state.price_per_ticket_to_register.clone().u128() * combination.len() as u128
+        )));
+    }
+
+    // save combination
+    let addr_raw = deps.api.addr_canonicalize(&addr.to_string())?;
+    combination_save(deps.storage, state.lottery_counter, addr_raw, combination)?;
+
+    Ok(Response::new()
+        .add_attribute("action", "register")
+        .add_attribute("pay-in", "ALTE"))
 }
 
 fn execute_register(
@@ -289,7 +395,8 @@ fn execute_register(
 
     Ok(Response::new()
         .add_messages(execute_msg)
-        .add_attribute("action", "register"))
+        .add_attribute("action", "register")
+        .add_attribute("pay-in", "UST"))
 }
 
 fn execute_play(deps: DepsMut, env: Env, info: MessageInfo) -> StdResult<Response> {
@@ -351,6 +458,22 @@ fn execute_play(deps: DepsMut, env: Env, info: MessageInfo) -> StdResult<Respons
     let jackpot = balance
         .amount
         .mul(Decimal::percent(state.jackpot_percentage_reward as u64));
+    // Get Altered balance and set altered jackpot
+    let prepare_msg_jackpot_altered = Cw20QueryMsg::Balance {
+        address: env.contract.address.to_string(),
+    };
+    let msg_jackpot_altered = WasmQuery::Smart {
+        contract_addr: deps
+            .api
+            .addr_humanize(&state.altered_contract_address)?
+            .to_string(),
+        msg: to_binary(&prepare_msg_jackpot_altered)?,
+    };
+    let response_jackpot_altered: BalanceResponse =
+        deps.querier.query(&msg_jackpot_altered.into())?;
+    let jackpot_altered = response_jackpot_altered
+        .balance
+        .mul(Decimal::percent(state.jackpot_percentage_reward as u64));
 
     // Drand worker fee
     let fee_for_drand_worker = jackpot
@@ -370,7 +493,13 @@ fn execute_play(deps: DepsMut, env: Env, info: MessageInfo) -> StdResult<Respons
         state.token_holder_percentage_fee_reward = 20;
     }
     // Save jackpot to storage
-    jackpot_storage(deps.storage).save(&state.lottery_counter.to_be_bytes(), &jackpot_after)?;
+    jackpot_storage(deps.storage).save(
+        &state.lottery_counter.to_be_bytes(),
+        &JackpotInfo {
+            ust: jackpot_after,
+            alte: jackpot_altered,
+        },
+    )?;
     // Update the state
     state.lottery_counter += 1;
 
@@ -522,7 +651,7 @@ fn execute_collect(
     }
 
     // Ensure there is jackpot reward to claim
-    if jackpot_reward.is_zero() {
+    if jackpot_reward.ust.is_zero() && jackpot_reward.alte.is_zero() {
         return Err(StdError::generic_err("No jackpot reward"));
     }
     let addr = match address {
@@ -556,21 +685,34 @@ fn execute_collect(
     }
 
     // Ensure the contract have sufficient balance to handle the transaction
-    if balance.amount < jackpot_reward {
+    if balance.amount < jackpot_reward.ust {
         return Err(StdError::generic_err("Not enough funds in the contract"));
     }
 
     let mut total_prize: u128 = 0;
+    let mut total_alte_prize: u128 = 0;
     for rank in rewards.clone().ranks {
         let rank_count = winner_count_by_rank_read(deps.storage, last_lottery_counter_round)
             .load(&rank.to_be_bytes())?;
+
         let prize = jackpot_reward
+            .ust
             .mul(Decimal::percent(
                 state.prize_rank_winner_percentage[rank as usize - 1] as u64,
             ))
             .u128()
             / rank_count.u128() as u128;
-        total_prize += prize
+        // TODO: We probably here need to verify if there is no ALTE balance
+        let alte_prize = jackpot_reward
+            .alte
+            .mul(Decimal::percent(
+                state.prize_rank_winner_percentage[rank as usize - 1] as u64,
+            ))
+            .u128()
+            / rank_count.u128() as u128;
+
+        total_prize += prize;
+        total_alte_prize += alte_prize;
     }
 
     // update the winner to claimed true
@@ -579,6 +721,12 @@ fn execute_collect(
         .save(canonical_addr.as_slice(), &rewards)?;
 
     let total_prize = Uint128::from(total_prize);
+    let total_alte_prize = Uint128::from(total_alte_prize);
+    /*
+        TODO : Add staking rewards fees
+        We will probably need to migrate our staking smart contract
+    */
+
     // Amount token holders can claim of the reward as fee
     let token_holder_fee_reward = total_prize.mul(Decimal::percent(
         state.token_holder_percentage_fee_reward as u64,
@@ -603,6 +751,19 @@ fn execute_collect(
         )?],
     )?;
 
+    let msg_prepare_transfer = Cw20ExecuteMsg::Transfer {
+        recipient: addr.to_string(),
+        amount: total_alte_prize,
+    };
+    let wasm_msg = CosmosMsg::Wasm(WasmMsg::Execute {
+        contract_addr: deps
+            .api
+            .addr_humanize(&state.altered_contract_address)?
+            .to_string(),
+        msg: to_binary(&msg_prepare_transfer)?,
+        funds: vec![],
+    });
+
     // Build the amount transaction
 
     // Send the jackpot
@@ -617,6 +778,7 @@ fn execute_collect(
                 },
             )?],
         }))
+        .add_message(wasm_msg)
         .add_message(res_update_global_index)
         .add_attribute("action", "handle_collect")
         .add_attribute("by", &info.sender.to_string())
@@ -1241,12 +1403,18 @@ fn query_all_players_by_lottery(deps: Deps, lottery_id: u64) -> StdResult<Vec<Ad
     Ok(players)
 }
 
-fn query_jackpot(deps: Deps, lottery_id: u64) -> StdResult<Uint128> {
-    let amount = match jackpot_storage_read(deps.storage).may_load(&lottery_id.to_be_bytes())? {
-        None => Uint128::zero(),
+fn query_jackpot(deps: Deps, lottery_id: u64) -> StdResult<JackpotResponse> {
+    let jackpot = match jackpot_storage_read(deps.storage).may_load(&lottery_id.to_be_bytes())? {
+        None => JackpotInfo {
+            ust: Uint128::zero(),
+            alte: Uint128::zero(),
+        },
         Some(jackpot) => jackpot,
     };
-    Ok(amount)
+    Ok(JackpotResponse {
+        ust: jackpot.ust,
+        alte: jackpot.alte,
+    })
 }
 fn query_count_ticket(deps: Deps, lottery_id: u64) -> StdResult<Uint128> {
     let amount = match count_total_ticket_by_lottery_read(deps.storage)
@@ -1351,13 +1519,7 @@ fn query_round(deps: Deps) -> StdResult<RoundResponse> {
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn migrate(deps: DepsMut, _env: Env, msg: MigrateMsg) -> StdResult<Response> {
-    let mut config = read_config(deps.storage)?;
-    config.terrand_contract_address = deps
-        .api
-        .addr_canonicalize(&msg.terrand_address.to_string())?;
-    store_config(deps.storage, &config)?;
-
+pub fn migrate(_deps: DepsMut, _env: Env, _msg: MigrateMsg) -> StdResult<Response> {
     Ok(Response::default())
 }
 
@@ -1651,7 +1813,12 @@ mod tests {
                 msg.clone(),
             )
             .unwrap();
-            assert_eq!(res, Response::new().add_attribute("action", "register"));
+            assert_eq!(
+                res,
+                Response::new()
+                    .add_attribute("action", "register")
+                    .add_attribute("pay-in", "UST")
+            );
             // Check combination added with success
             let addr = deps
                 .api
@@ -2194,7 +2361,13 @@ mod tests {
 
             let state = read_config(&deps.storage).unwrap();
             jackpot_storage(deps.as_mut().storage)
-                .save(&(state.lottery_counter - 1).to_be_bytes(), &Uint128::zero())
+                .save(
+                    &(state.lottery_counter - 1).to_be_bytes(),
+                    &JackpotInfo {
+                        ust: Uint128::zero(),
+                        alte: Uint128::zero(),
+                    },
+                )
                 .unwrap();
             let jackpot_reward_before = jackpot_storage_read(&deps.storage)
                 .load(&(state.lottery_counter - 1).to_be_bytes())
@@ -2229,10 +2402,10 @@ mod tests {
 
             println!("{:?}", jackpot_reward_after);
             assert_eq!(50, state_after.token_holder_percentage_fee_reward);
-            assert_eq!(jackpot_reward_before, Uint128::zero());
-            assert_ne!(jackpot_reward_after, jackpot_reward_before);
+            assert_eq!(jackpot_reward_before.ust, Uint128::zero());
+            assert_ne!(jackpot_reward_after.ust, jackpot_reward_before.ust);
             // 720720 total fees
-            assert_eq!(jackpot_reward_after, Uint128::from(1_799_820u128));
+            assert_eq!(jackpot_reward_after.ust, Uint128::from(1_799_820u128));
             assert_eq!(state_after.lottery_counter, 2);
             assert_ne!(state_after.lottery_counter, state.lottery_counter);
         }
@@ -2268,7 +2441,13 @@ mod tests {
 
             let state = read_config(&deps.storage).unwrap();
             jackpot_storage(deps.as_mut().storage)
-                .save(&(state.lottery_counter - 1).to_be_bytes(), &Uint128::zero())
+                .save(
+                    &(state.lottery_counter - 1).to_be_bytes(),
+                    &JackpotInfo {
+                        ust: Uint128::zero(),
+                        alte: Uint128::zero(),
+                    },
+                )
                 .unwrap();
             let jackpot_reward_before = jackpot_storage_read(&deps.storage)
                 .load(&(state.lottery_counter - 1).to_be_bytes())
@@ -2298,10 +2477,10 @@ mod tests {
 
             println!("{:?}", jackpot_reward_after);
             assert_eq!(50, state_after.token_holder_percentage_fee_reward);
-            assert_eq!(jackpot_reward_before, Uint128::zero());
-            assert_ne!(jackpot_reward_after, jackpot_reward_before);
+            assert_eq!(jackpot_reward_before.ust, Uint128::zero());
+            assert_ne!(jackpot_reward_after.ust, jackpot_reward_before.ust);
             // 720720 total fees
-            assert_eq!(jackpot_reward_after, Uint128::from(1_799_820u128));
+            assert_eq!(jackpot_reward_after.ust, Uint128::from(1_799_820u128));
             assert_eq!(state_after.lottery_counter, 2);
             assert_ne!(state_after.lottery_counter, state.lottery_counter);
         }
@@ -2357,7 +2536,13 @@ mod tests {
             let state = read_config(&deps.storage).unwrap();
             assert_eq!(50, state.token_holder_percentage_fee_reward);
             jackpot_storage(deps.as_mut().storage)
-                .save(&(state.lottery_counter - 1).to_be_bytes(), &Uint128::zero())
+                .save(
+                    &(state.lottery_counter - 1).to_be_bytes(),
+                    &JackpotInfo {
+                        ust: Uint128::zero(),
+                        alte: Uint128::zero(),
+                    },
+                )
                 .unwrap();
             let jackpot_reward_before = jackpot_storage_read(&deps.storage)
                 .load(&(state.lottery_counter - 1).to_be_bytes())
@@ -2394,10 +2579,10 @@ mod tests {
 
             println!("{:?}", jackpot_reward_after);
             assert_eq!(50, state_after.token_holder_percentage_fee_reward);
-            assert_eq!(jackpot_reward_before, Uint128::zero());
-            assert_ne!(jackpot_reward_after, jackpot_reward_before);
+            assert_eq!(jackpot_reward_before.ust, Uint128::zero());
+            assert_ne!(jackpot_reward_after.ust, jackpot_reward_before.ust);
             // 720720 total fees
-            assert_eq!(jackpot_reward_after, Uint128::from(1_799_820u128));
+            assert_eq!(jackpot_reward_after.ust, Uint128::from(1_799_820u128));
             assert_eq!(state_after.lottery_counter, 2);
             assert_ne!(state_after.lottery_counter, state.lottery_counter);
         }
@@ -2412,7 +2597,13 @@ mod tests {
             default_init(deps.as_mut());
             let mut state = read_config(&deps.storage).unwrap();
             jackpot_storage(deps.as_mut().storage)
-                .save(&(state.lottery_counter - 1).to_be_bytes(), &Uint128::zero())
+                .save(
+                    &(state.lottery_counter - 1).to_be_bytes(),
+                    &JackpotInfo {
+                        ust: Uint128::zero(),
+                        alte: Uint128::zero(),
+                    },
+                )
                 .unwrap();
             state.safe_lock = true;
             store_config(deps.as_mut().storage, &state).unwrap();
@@ -2462,7 +2653,13 @@ mod tests {
             default_init(deps.as_mut());
             let state = read_config(deps.as_mut().storage).unwrap();
             jackpot_storage(deps.as_mut().storage)
-                .save(&(state.lottery_counter - 1).to_be_bytes(), &Uint128::zero())
+                .save(
+                    &(state.lottery_counter - 1).to_be_bytes(),
+                    &JackpotInfo {
+                        ust: Uint128::zero(),
+                        alte: Uint128::zero(),
+                    },
+                )
                 .unwrap();
             let mut env = mock_env();
             let info = mock_info(&before_all.default_sender.to_string(), &[]);
@@ -2485,7 +2682,13 @@ mod tests {
             default_init(deps.as_mut());
             let state = read_config(deps.as_mut().storage).unwrap();
             jackpot_storage(deps.as_mut().storage)
-                .save(&(state.lottery_counter - 1).to_be_bytes(), &Uint128::zero())
+                .save(
+                    &(state.lottery_counter - 1).to_be_bytes(),
+                    &JackpotInfo {
+                        ust: Uint128::zero(),
+                        alte: Uint128::zero(),
+                    },
+                )
                 .unwrap();
 
             let mut env = mock_env();
@@ -2513,7 +2716,10 @@ mod tests {
             jackpot_storage(deps.as_mut().storage)
                 .save(
                     &(state.lottery_counter - 1).to_be_bytes(),
-                    &Uint128::from(1_000_000u128),
+                    &JackpotInfo {
+                        ust: Uint128::from(1_000_000u128),
+                        alte: Uint128::zero(),
+                    },
                 )
                 .unwrap();
 
@@ -2544,7 +2750,10 @@ mod tests {
             jackpot_storage(deps.as_mut().storage)
                 .save(
                     &(state_before.lottery_counter - 1).to_be_bytes(),
-                    &Uint128::from(1_000_000u128),
+                    &JackpotInfo {
+                        ust: Uint128::from(1_000_000u128),
+                        alte: Uint128::zero(),
+                    },
                 )
                 .unwrap();
 
@@ -2612,7 +2821,10 @@ mod tests {
             jackpot_storage(deps.as_mut().storage)
                 .save(
                     &(state_before.lottery_counter - 1).to_be_bytes(),
-                    &Uint128::from(1_000_000u128),
+                    &JackpotInfo {
+                        ust: Uint128::from(1_000_000u128),
+                        alte: Uint128::zero(),
+                    },
                 )
                 .unwrap();
 
@@ -2661,7 +2873,10 @@ mod tests {
             jackpot_storage(deps.as_mut().storage)
                 .save(
                     &(state_before.lottery_counter - 1).to_be_bytes(),
-                    &Uint128::from(1_000_000u128),
+                    &JackpotInfo {
+                        ust: Uint128::from(1_000_000u128),
+                        alte: Uint128::zero(),
+                    },
                 )
                 .unwrap();
 
@@ -2775,7 +2990,10 @@ mod tests {
             jackpot_storage(deps.as_mut().storage)
                 .save(
                     &(state_before.lottery_counter - 1).to_be_bytes(),
-                    &Uint128::from(1_000_000u128),
+                    &JackpotInfo {
+                        ust: Uint128::from(1_000_000u128),
+                        alte: Uint128::zero(),
+                    },
                 )
                 .unwrap();
 
@@ -2880,7 +3098,10 @@ mod tests {
             jackpot_storage(deps.as_mut().storage)
                 .save(
                     &(state_before.lottery_counter - 1).to_be_bytes(),
-                    &Uint128::from(1_000_000u128),
+                    &JackpotInfo {
+                        ust: Uint128::from(1_000_000u128),
+                        alte: Uint128::zero(),
+                    },
                 )
                 .unwrap();
 
