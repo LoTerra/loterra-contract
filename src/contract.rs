@@ -75,7 +75,7 @@ pub fn instantiate(
         holders_bonus_block_time_end: msg.holders_bonus_block_time_end,
         bonus_burn_rate: 10,
         bonus: 0,
-        counter_claim: 0,
+        // counter_claim: 0,
     };
     store_config(deps.storage, &config)?;
 
@@ -504,7 +504,7 @@ fn execute_play(deps: DepsMut, env: Env, info: MessageInfo) -> StdResult<Respons
     )?;
     // Update the state
     state.lottery_counter += 1;
-    state.counter_claim = 0;
+    // state.counter_claim = 0;
 
     // Save the new state
     store_config(deps.storage, &state)?;
