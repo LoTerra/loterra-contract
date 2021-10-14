@@ -21,7 +21,8 @@ use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
     from_binary, to_binary, Addr, BankMsg, Binary, CanonicalAddr, Coin, CosmosMsg, Decimal, Deps,
-    DepsMut, Env, MessageInfo, Order, Response, StdError, StdResult, Uint128, WasmMsg, WasmQuery,
+    DepsMut, Env, MessageInfo, Order, Response, StdError, StdResult, SubMsg, Uint128, WasmMsg,
+    WasmQuery,
 };
 use cw0::calc_range_start;
 use cw20::{BalanceResponse, Cw20ExecuteMsg, Cw20QueryMsg, Cw20ReceiveMsg};
@@ -74,6 +75,7 @@ pub fn instantiate(
         holders_bonus_block_time_end: msg.holders_bonus_block_time_end,
         bonus_burn_rate: 10,
         bonus: 0,
+        counter_claim: 0,
     };
     store_config(deps.storage, &config)?;
 
@@ -502,6 +504,7 @@ fn execute_play(deps: DepsMut, env: Env, info: MessageInfo) -> StdResult<Respons
     )?;
     // Update the state
     state.lottery_counter += 1;
+    state.counter_claim = 0;
 
     // Save the new state
     store_config(deps.storage, &state)?;
@@ -586,12 +589,16 @@ fn execute_claim(
             kind: "No combination found".to_string(),
         });
     }
+
     let mut some_winner = 0;
+    // let mut add_claim = 0;
     for (addr, comb_raw) in combination {
         match winner_storage_read(deps.storage, last_lottery_counter_round)
             .may_load(addr.as_slice())?
         {
             None => {
+                // Add amount claimed in order to track claims and unlock faster collect
+                // add_claim = add_claim + 1;
                 for combo in comb_raw {
                     let match_count = count_match(&combo, &lottery_winning_combination);
                     let rank = match match_count {
@@ -619,6 +626,10 @@ fn execute_claim(
             kind: "No winning combination or already claimed".to_string(),
         });
     }
+
+    // state.counter_claim = state.counter_claim + add_claim;
+    // store_config(deps.storage, &state)?;
+
     Ok(Response::new().add_attribute("action", "claim"))
 }
 // Players claim the jackpot
@@ -639,6 +650,13 @@ fn execute_collect(
     let jackpot_reward =
         jackpot_storage(deps.storage).load(&last_lottery_counter_round.to_be_bytes())?;
 
+    // let player_amount = match count_player_by_lottery_read(deps.storage)
+    //     .may_load(&last_lottery_counter_round.to_be_bytes())?
+    // {
+    //     None => Uint128::zero(),
+    //     Some(players) => players,
+    // };
+
     if state.safe_lock {
         return Err(StdError::generic_err(
             "Contract deactivated for update or/and preventing security issue",
@@ -647,6 +665,9 @@ fn execute_collect(
     if env.block.time.seconds()
         < state.block_time_play - state.every_block_time_play / DIV_BLOCK_TIME_BY_X
     {
+        // if player_amount.u128() as u64 != state.counter_claim {
+        //     return Err(StdError::generic_err("Collecting jackpot is closed"));
+        // }
         return Err(StdError::generic_err("Collecting jackpot is closed"));
     }
 
@@ -765,10 +786,20 @@ fn execute_collect(
     });
 
     // Build the amount transaction
+    let mut res = Response::new()
+        .add_attribute("action", "handle_collect")
+        .add_attribute("by", &info.sender.to_string())
+        .add_attribute("to", &addr.to_string())
+        .add_attribute("collecting_jackpot_prize", "yes");
 
-    // Send the jackpot
-    Ok(Response::new()
-        .add_message(CosmosMsg::Bank(BankMsg::Send {
+    let mut msg_cw = vec![];
+    if !total_alte_prize.is_zero() {
+        msg_cw.push(SubMsg::new(wasm_msg));
+    };
+
+    if !total_prize.is_zero() {
+        // Add fee message
+        msg_cw.push(SubMsg::new(CosmosMsg::Bank(BankMsg::Send {
             to_address: addr.to_string(),
             amount: vec![deduct_tax(
                 &deps.as_ref(),
@@ -777,13 +808,24 @@ fn execute_collect(
                     amount: total_prize_after,
                 },
             )?],
-        }))
-        .add_message(wasm_msg)
-        .add_message(res_update_global_index)
-        .add_attribute("action", "handle_collect")
-        .add_attribute("by", &info.sender.to_string())
-        .add_attribute("to", &addr.to_string())
-        .add_attribute("collecting_jackpot_prize", "yes"))
+        })));
+        msg_cw.push(SubMsg::new(res_update_global_index));
+        // res.add_message(CosmosMsg::Bank(BankMsg::Send {
+        //     to_address: addr.to_string(),
+        //     amount: vec![deduct_tax(
+        //         &deps.as_ref(),
+        //         Coin {
+        //             denom: state.denom_stable,
+        //             amount: total_prize_after,
+        //         },
+        //     )?],
+        // })).add_message(res_update_global_index);
+    }
+
+    res.messages = msg_cw;
+
+    // Send the jackpot
+    Ok(res)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2589,6 +2631,7 @@ mod tests {
     }
     mod collect {
         use super::*;
+        use crate::state::count_player_by_lottery;
 
         #[test]
         fn security_active() {
@@ -2652,6 +2695,14 @@ mod tests {
             }]);
             default_init(deps.as_mut());
             let state = read_config(deps.as_mut().storage).unwrap();
+            // Add 1 player here
+            count_player_by_lottery(deps.as_mut().storage)
+                .save(
+                    &(state.lottery_counter - 1).to_be_bytes(),
+                    &Uint128::from(1u128),
+                )
+                .unwrap();
+
             jackpot_storage(deps.as_mut().storage)
                 .save(
                     &(state.lottery_counter - 1).to_be_bytes(),
@@ -2992,7 +3043,7 @@ mod tests {
                     &(state_before.lottery_counter - 1).to_be_bytes(),
                     &JackpotInfo {
                         ust: Uint128::from(1_000_000u128),
-                        alte: Uint128::zero(),
+                        alte: Uint128::from(1_000_000u128),
                     },
                 )
                 .unwrap();
@@ -3021,10 +3072,19 @@ mod tests {
             let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
             println!("{:?}", res);
 
-            assert_eq!(res.messages.len(), 2);
+            assert_eq!(res.messages.len(), 3);
             let amount_claimed = Uint128::from(217499u128);
+
             assert_eq!(
                 res.messages[0],
+                SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
+                    contract_addr: "altered".to_string(),
+                    msg: Binary::from(r#"{"transfer":{"recipient":"terra1q88h7ewu6h3am4mxxeqhu3srt7zw4z5s20q007","amount":"435000"}}"#.as_bytes()),
+                    funds: vec![]
+                }))
+            );
+            assert_eq!(
+                res.messages[1],
                 SubMsg::new(CosmosMsg::Bank(BankMsg::Send {
                     to_address: before_all.default_sender.to_string(),
                     amount: vec![Coin {
@@ -3034,7 +3094,7 @@ mod tests {
                 }))
             );
             assert_eq!(
-                res.messages[1],
+                res.messages[2],
                 SubMsg::new(CosmosMsg::Wasm(WasmMsg::Execute {
                     contract_addr: deps
                         .api

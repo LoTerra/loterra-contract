@@ -5,6 +5,7 @@ use cosmwasm_std::{
     from_slice, to_binary, Addr, Binary, Coin, ContractResult, Decimal, OwnedDeps, Querier,
     QuerierResult, QueryRequest, SystemError, SystemResult, Uint128, WasmQuery,
 };
+use cw20::BalanceResponse;
 use serde::Serialize;
 use terra_cosmwasm::{TaxCapResponse, TaxRateResponse, TerraQuery, TerraQueryWrapper};
 
@@ -133,6 +134,11 @@ impl WasmMockQuerier {
                         worker: Addr::unchecked("terra1q88h7ewu6h3am4mxxeqhu3srxterrandworker"),
                     };
                     return SystemResult::Ok(ContractResult::Ok(to_binary(&msg_terrand).unwrap()));
+                } else if contract_addr == &Addr::unchecked("altered") {
+                    let msg_balance = BalanceResponse {
+                        balance: Uint128::from(1_000_000_000u128),
+                    };
+                    return SystemResult::Ok(ContractResult::Ok(to_binary(&msg_balance).unwrap()));
                 } else if contract_addr
                     == &Addr::unchecked("terra1q88h7ewu6h3am4mxxeqhu3srloterrastaking")
                 {
