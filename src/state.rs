@@ -41,7 +41,7 @@ pub struct Config {
     pub holders_bonus_block_time_end: u64,
     pub bonus_burn_rate: u8,
     pub bonus: u8,
-    pub counter_claim: u64,
+    // pub counter_claim: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
