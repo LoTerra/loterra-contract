@@ -1788,18 +1788,113 @@ mod tests {
     }
 
     mod register_alte {
-        /*
-            TODO: Register with ALTE
-        */
         use super::*;
 
         #[test]
-        fn register_success() {
+        fn register_alte() {
             let before_all = before_all();
             let mut deps = mock_dependencies(&[]);
             default_init(deps.as_mut());
 
-            // Register without bonus
+            // Register error not valid combination
+            let exec_msg = ReceiveMsg::RegisterAlte {
+                gift_address: None,
+                combination: vec![
+                    "1e3fab".to_string(),
+                    "abcdek".to_string(),
+                    "123456".to_string(),
+                ],
+            };
+            let msg = Cw20ReceiveMsg {
+                sender: before_all.default_sender.to_string(),
+                amount: Uint128::from(3_000_000_u128),
+                msg: to_binary(&exec_msg).unwrap(),
+            };
+            let receive_msg = ExecuteMsg::Receive(msg);
+
+            let res = execute(
+                deps.as_mut(),
+                mock_env(),
+                mock_info(&"altered".to_string(), &[]),
+                receive_msg.clone(),
+            )
+            .unwrap_err();
+            assert_eq!(
+                res,
+                StdError::generic_err(
+                    "Not authorized use combination of [a-f] and [0-9] with length 6"
+                )
+            );
+
+            // Register error not enough money
+            let exec_msg = ReceiveMsg::RegisterAlte {
+                gift_address: None,
+                combination: vec![
+                    "1e3fab".to_string(),
+                    "abcdef".to_string(),
+                    "123456".to_string(),
+                ],
+            };
+            let msg = Cw20ReceiveMsg {
+                sender: before_all.default_sender.to_string(),
+                amount: Uint128::from(1_000_000_u128),
+                msg: to_binary(&exec_msg).unwrap(),
+            };
+            let receive_msg = ExecuteMsg::Receive(msg);
+
+            let res = execute(
+                deps.as_mut(),
+                mock_env(),
+                mock_info(&"altered".to_string(), &[]),
+                receive_msg.clone(),
+            )
+            .unwrap_err();
+            assert_eq!(res, StdError::generic_err("send 3000000ALTE"));
+
+            // Register success without bonus with a gift
+            let exec_msg = ReceiveMsg::RegisterAlte {
+                gift_address: Some(before_all.default_sender_two.to_string()),
+                combination: vec![
+                    "1e3fab".to_string(),
+                    "abcdef".to_string(),
+                    "123456".to_string(),
+                ],
+            };
+            let msg = Cw20ReceiveMsg {
+                sender: before_all.default_sender.to_string(),
+                amount: Uint128::from(3_000_000_u128),
+                msg: to_binary(&exec_msg).unwrap(),
+            };
+            let receive_msg = ExecuteMsg::Receive(msg);
+
+            let res = execute(
+                deps.as_mut(),
+                mock_env(),
+                mock_info(&"altered".to_string(), &[]),
+                receive_msg.clone(),
+            )
+            .unwrap();
+            assert_eq!(
+                res,
+                Response::new()
+                    .add_attribute("action", "register")
+                    .add_attribute("pay-in", "ALTE")
+            );
+            // Check combination added with success
+            let addr = deps
+                .api
+                .addr_canonicalize(&before_all.default_sender_two.to_string())
+                .unwrap();
+            let store_two = user_combination_bucket_read(deps.as_mut().storage, 1u64)
+                .load(&addr.as_slice())
+                .unwrap();
+            assert_eq!(3, store_two.len());
+            let msg_query = QueryMsg::Players { lottery_id: 1 };
+            let res = query(deps.as_ref(), mock_env(), msg_query).unwrap();
+            let formated_binary = String::from_utf8(res.into()).unwrap();
+            println!("sdsds {:?}", formated_binary);
+
+            // Register success without bonus
             let exec_msg = ReceiveMsg::RegisterAlte {
                 gift_address: None,
                 combination: vec![
@@ -1842,14 +1937,7 @@ mod tests {
             let formated_binary = String::from_utf8(res.into()).unwrap();
             println!("sdsds {:?}", formated_binary);
 
-            /*let store_three = all_players_storage_read(deps.storage, 1u64)
-                .load(&1u64.to_be_bytes())
-                .unwrap();
-            assert_eq!(store_three.len(), 1);
-            assert_eq!(store_three[0], addr);
-            */
-
-            // Register with bonus active 50% bonus
+            // Register success with bonus active 50% bonus
             let exec_msg = ReceiveMsg::RegisterAlte {
                 gift_address: None,
                 combination: vec![
