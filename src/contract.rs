@@ -224,27 +224,34 @@ fn execute_register_alte(
         )));
     }
 
-    // Ratio is a decimal 0.5
-    let bonus_burn: Uint128 = Uint128::from(
+    // Bonus amount
+    let bonus: Uint128 = Uint128::from(
         state.price_per_ticket_to_register.clone().u128() * combination.len() as u128,
     )
-    .mul(Decimal::from_ratio(
-        Uint128::from(state.bonus_burn_rate as u128),
-        Uint128::from(100u128),
-    ));
-    // Bonus amount
-    let bonus: Uint128 =
-        bonus_burn.multiply_ratio(Uint128::from(state.bonus as u128), Uint128::from(100u128));
+    .multiply_ratio(Uint128::from(state.bonus as u128), Uint128::from(100u128));
 
     // Handle the player is not sending too much or too less
-    if amount.checked_sub(bonus)?.u128()
-        != state.price_per_ticket_to_register.u128() * combination.len() as u128
+    if amount.u128()
+        != Uint128::from(
+            state.price_per_ticket_to_register.clone().u128() * combination.len() as u128,
+        )
+        .sub(bonus)
+        .u128()
     {
         return Err(StdError::generic_err(format!(
             "send {}ALTE",
             state.price_per_ticket_to_register.clone().u128() * combination.len() as u128
         )));
     }
+
+    // if amount.checked_sub(bonus)?.u128()
+    //     != state.price_per_ticket_to_register.u128() * combination.len() as u128
+    // {
+    //     return Err(StdError::generic_err(format!(
+    //         "send {}ALTE",
+    //         state.price_per_ticket_to_register.clone().u128() * combination.len() as u128
+    //     )));
+    // }
 
     // save combination
     let addr_raw = deps.api.addr_canonicalize(&addr.to_string())?;
