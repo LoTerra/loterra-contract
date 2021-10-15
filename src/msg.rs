@@ -86,8 +86,10 @@ pub enum QueryMsg {
     CountWinner { lottery_id: u64, rank: u8 },
     /// Get winning combination by lottery id
     WinningCombination { lottery_id: u64 },
-    /// Get the jackpot by lottery id
+    /// Get the jackpot by lottery id in UST
     Jackpot { lottery_id: u64 },
+    /// Get the jackpot by lottery id in ALTE
+    JackpotAlte { lottery_id: u64 },
     /// Get all players by lottery id
     Players { lottery_id: u64 },
     /// Get all players
@@ -165,12 +167,4 @@ pub type RoundResponse = Round;
 pub type ConfigResponse = Config;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct MigrateMsg {
-    pub terrand_address: Addr,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct JackpotResponse {
-    pub ust: Uint128,
-    pub alte: Uint128,
-}
+pub struct MigrateMsg {}

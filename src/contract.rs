@@ -4,16 +4,16 @@ use crate::helpers::{
 };
 use crate::msg::{
     AllCombinationResponse, AllWinnersResponse, ConfigResponse, ExecuteMsg, GetPollResponse,
-    InitMsg, JackpotResponse, MigrateMsg, QueryMsg, ReceiveMsg, RoundResponse, WinnerResponse,
+    InitMsg, MigrateMsg, QueryMsg, ReceiveMsg, RoundResponse, WinnerResponse,
 };
 use crate::state::{
     address_players_read, all_players_storage_read, all_winners, combination_save,
     count_player_by_lottery_read, count_total_ticket_by_lottery_read, jackpot_storage,
-    jackpot_storage_read, lottery_winning_combination_storage,
-    lottery_winning_combination_storage_read, poll_storage, poll_storage_read, poll_vote_storage,
-    read_config, save_winner, store_config, user_combination_bucket_read,
-    winner_count_by_rank_read, winner_storage, winner_storage_read, Config, JackpotInfo,
-    PollInfoState, PollStatus, Proposal,
+    jackpot_storage_alte, jackpot_storage_read, jackpot_storage_read_alte,
+    lottery_winning_combination_storage, lottery_winning_combination_storage_read, poll_storage,
+    poll_storage_read, poll_vote_storage, read_config, save_winner, store_config,
+    user_combination_bucket_read, winner_count_by_rank_read, winner_storage, winner_storage_read,
+    Config, PollInfoState, PollStatus, Proposal,
 };
 use crate::taxation::deduct_tax;
 #[cfg(not(feature = "library"))]
@@ -497,13 +497,10 @@ fn execute_play(deps: DepsMut, env: Env, info: MessageInfo) -> StdResult<Respons
         state.token_holder_percentage_fee_reward = 20;
     }
     // Save jackpot to storage
-    jackpot_storage(deps.storage).save(
-        &state.lottery_counter.to_be_bytes(),
-        &JackpotInfo {
-            ust: jackpot_after,
-            alte: jackpot_altered,
-        },
-    )?;
+    jackpot_storage(deps.storage).save(&state.lottery_counter.to_be_bytes(), &jackpot_after)?;
+    jackpot_storage_alte(deps.storage)
+        .save(&state.lottery_counter.to_be_bytes(), &jackpot_altered)?;
+
     // Update the state
     state.lottery_counter += 1;
     // state.counter_claim = 0;
@@ -650,7 +647,9 @@ fn execute_collect(
     let state = read_config(deps.storage)?;
     let last_lottery_counter_round = state.lottery_counter - 1;
     let jackpot_reward =
-        jackpot_storage(deps.storage).load(&last_lottery_counter_round.to_be_bytes())?;
+        jackpot_storage_read(deps.storage).load(&last_lottery_counter_round.to_be_bytes())?;
+    let jackpot_reward_alte =
+        jackpot_storage_read_alte(deps.storage).load(&last_lottery_counter_round.to_be_bytes())?;
 
     // let player_amount = match count_player_by_lottery_read(deps.storage)
     //     .may_load(&last_lottery_counter_round.to_be_bytes())?
@@ -674,7 +673,7 @@ fn execute_collect(
     }
 
     // Ensure there is jackpot reward to claim
-    if jackpot_reward.ust.is_zero() && jackpot_reward.alte.is_zero() {
+    if jackpot_reward.is_zero() && jackpot_reward_alte.is_zero() {
         return Err(StdError::generic_err("No jackpot reward"));
     }
     let addr = match address {
@@ -708,7 +707,7 @@ fn execute_collect(
     }
 
     // Ensure the contract have sufficient balance to handle the transaction
-    if balance.amount < jackpot_reward.ust {
+    if balance.amount < jackpot_reward {
         return Err(StdError::generic_err("Not enough funds in the contract"));
     }
 
@@ -719,15 +718,13 @@ fn execute_collect(
             .load(&rank.to_be_bytes())?;
 
         let prize = jackpot_reward
-            .ust
             .mul(Decimal::percent(
                 state.prize_rank_winner_percentage[rank as usize - 1] as u64,
             ))
             .u128()
             / rank_count.u128() as u128;
         // TODO: We probably here need to verify if there is no ALTE balance
-        let alte_prize = jackpot_reward
-            .alte
+        let alte_prize = jackpot_reward_alte
             .mul(Decimal::percent(
                 state.prize_rank_winner_percentage[rank as usize - 1] as u64,
             ))
@@ -1384,6 +1381,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
             to_binary(&query_winner_rank(deps, lottery_id, rank)?)?
         }
         QueryMsg::Jackpot { lottery_id } => to_binary(&query_jackpot(deps, lottery_id)?)?,
+        QueryMsg::JackpotAlte { lottery_id } => to_binary(&query_jackpot_alte(deps, lottery_id)?)?,
         QueryMsg::Players { lottery_id } => {
             to_binary(&query_all_players_by_lottery(deps, lottery_id)?)?
         }
@@ -1447,19 +1445,23 @@ fn query_all_players_by_lottery(deps: Deps, lottery_id: u64) -> StdResult<Vec<Ad
     Ok(players)
 }
 
-fn query_jackpot(deps: Deps, lottery_id: u64) -> StdResult<JackpotResponse> {
+fn query_jackpot(deps: Deps, lottery_id: u64) -> StdResult<Uint128> {
     let jackpot = match jackpot_storage_read(deps.storage).may_load(&lottery_id.to_be_bytes())? {
-        None => JackpotInfo {
-            ust: Uint128::zero(),
-            alte: Uint128::zero(),
-        },
+        None => Uint128::zero(),
         Some(jackpot) => jackpot,
     };
-    Ok(JackpotResponse {
-        ust: jackpot.ust,
-        alte: jackpot.alte,
-    })
+    Ok(jackpot)
 }
+
+fn query_jackpot_alte(deps: Deps, lottery_id: u64) -> StdResult<Uint128> {
+    let jackpot =
+        match jackpot_storage_read_alte(deps.storage).may_load(&lottery_id.to_be_bytes())? {
+            None => Uint128::zero(),
+            Some(jackpot) => jackpot,
+        };
+    Ok(jackpot)
+}
+
 fn query_count_ticket(deps: Deps, lottery_id: u64) -> StdResult<Uint128> {
     let amount = match count_total_ticket_by_lottery_read(deps.storage)
         .may_load(&lottery_id.to_be_bytes())?
@@ -2609,13 +2611,10 @@ mod tests {
 
             let state = read_config(&deps.storage).unwrap();
             jackpot_storage(deps.as_mut().storage)
-                .save(
-                    &(state.lottery_counter - 1).to_be_bytes(),
-                    &JackpotInfo {
-                        ust: Uint128::zero(),
-                        alte: Uint128::zero(),
-                    },
-                )
+                .save(&(state.lottery_counter - 1).to_be_bytes(), &Uint128::zero())
+                .unwrap();
+            jackpot_storage_alte(deps.as_mut().storage)
+                .save(&(state.lottery_counter - 1).to_be_bytes(), &Uint128::zero())
                 .unwrap();
             let jackpot_reward_before = jackpot_storage_read(&deps.storage)
                 .load(&(state.lottery_counter - 1).to_be_bytes())
@@ -2650,10 +2649,10 @@ mod tests {
 
             println!("{:?}", jackpot_reward_after);
             assert_eq!(50, state_after.token_holder_percentage_fee_reward);
-            assert_eq!(jackpot_reward_before.ust, Uint128::zero());
-            assert_ne!(jackpot_reward_after.ust, jackpot_reward_before.ust);
+            assert_eq!(jackpot_reward_before, Uint128::zero());
+            assert_ne!(jackpot_reward_after, jackpot_reward_before);
             // 720720 total fees
-            assert_eq!(jackpot_reward_after.ust, Uint128::from(1_799_820u128));
+            assert_eq!(jackpot_reward_after, Uint128::from(1_799_820u128));
             assert_eq!(state_after.lottery_counter, 2);
             assert_ne!(state_after.lottery_counter, state.lottery_counter);
         }
@@ -2689,13 +2688,10 @@ mod tests {
 
             let state = read_config(&deps.storage).unwrap();
             jackpot_storage(deps.as_mut().storage)
-                .save(
-                    &(state.lottery_counter - 1).to_be_bytes(),
-                    &JackpotInfo {
-                        ust: Uint128::zero(),
-                        alte: Uint128::zero(),
-                    },
-                )
+                .save(&(state.lottery_counter - 1).to_be_bytes(), &Uint128::zero())
+                .unwrap();
+            jackpot_storage_alte(deps.as_mut().storage)
+                .save(&(state.lottery_counter - 1).to_be_bytes(), &Uint128::zero())
                 .unwrap();
             let jackpot_reward_before = jackpot_storage_read(&deps.storage)
                 .load(&(state.lottery_counter - 1).to_be_bytes())
@@ -2725,10 +2721,10 @@ mod tests {
 
             println!("{:?}", jackpot_reward_after);
             assert_eq!(50, state_after.token_holder_percentage_fee_reward);
-            assert_eq!(jackpot_reward_before.ust, Uint128::zero());
-            assert_ne!(jackpot_reward_after.ust, jackpot_reward_before.ust);
+            assert_eq!(jackpot_reward_before, Uint128::zero());
+            assert_ne!(jackpot_reward_after, jackpot_reward_before);
             // 720720 total fees
-            assert_eq!(jackpot_reward_after.ust, Uint128::from(1_799_820u128));
+            assert_eq!(jackpot_reward_after, Uint128::from(1_799_820u128));
             assert_eq!(state_after.lottery_counter, 2);
             assert_ne!(state_after.lottery_counter, state.lottery_counter);
         }
@@ -2784,13 +2780,10 @@ mod tests {
             let state = read_config(&deps.storage).unwrap();
             assert_eq!(50, state.token_holder_percentage_fee_reward);
             jackpot_storage(deps.as_mut().storage)
-                .save(
-                    &(state.lottery_counter - 1).to_be_bytes(),
-                    &JackpotInfo {
-                        ust: Uint128::zero(),
-                        alte: Uint128::zero(),
-                    },
-                )
+                .save(&(state.lottery_counter - 1).to_be_bytes(), &Uint128::zero())
+                .unwrap();
+            jackpot_storage_alte(deps.as_mut().storage)
+                .save(&(state.lottery_counter - 1).to_be_bytes(), &Uint128::zero())
                 .unwrap();
             let jackpot_reward_before = jackpot_storage_read(&deps.storage)
                 .load(&(state.lottery_counter - 1).to_be_bytes())
@@ -2827,10 +2820,10 @@ mod tests {
 
             println!("{:?}", jackpot_reward_after);
             assert_eq!(50, state_after.token_holder_percentage_fee_reward);
-            assert_eq!(jackpot_reward_before.ust, Uint128::zero());
-            assert_ne!(jackpot_reward_after.ust, jackpot_reward_before.ust);
+            assert_eq!(jackpot_reward_before, Uint128::zero());
+            assert_ne!(jackpot_reward_after, jackpot_reward_before);
             // 720720 total fees
-            assert_eq!(jackpot_reward_after.ust, Uint128::from(1_799_820u128));
+            assert_eq!(jackpot_reward_after, Uint128::from(1_799_820u128));
             assert_eq!(state_after.lottery_counter, 2);
             assert_ne!(state_after.lottery_counter, state.lottery_counter);
         }
@@ -2846,13 +2839,10 @@ mod tests {
             default_init(deps.as_mut());
             let mut state = read_config(&deps.storage).unwrap();
             jackpot_storage(deps.as_mut().storage)
-                .save(
-                    &(state.lottery_counter - 1).to_be_bytes(),
-                    &JackpotInfo {
-                        ust: Uint128::zero(),
-                        alte: Uint128::zero(),
-                    },
-                )
+                .save(&(state.lottery_counter - 1).to_be_bytes(), &Uint128::zero())
+                .unwrap();
+            jackpot_storage_alte(deps.as_mut().storage)
+                .save(&(state.lottery_counter - 1).to_be_bytes(), &Uint128::zero())
                 .unwrap();
             state.safe_lock = true;
             store_config(deps.as_mut().storage, &state).unwrap();
@@ -2910,13 +2900,10 @@ mod tests {
                 .unwrap();
 
             jackpot_storage(deps.as_mut().storage)
-                .save(
-                    &(state.lottery_counter - 1).to_be_bytes(),
-                    &JackpotInfo {
-                        ust: Uint128::zero(),
-                        alte: Uint128::zero(),
-                    },
-                )
+                .save(&(state.lottery_counter - 1).to_be_bytes(), &Uint128::zero())
+                .unwrap();
+            jackpot_storage_alte(deps.as_mut().storage)
+                .save(&(state.lottery_counter - 1).to_be_bytes(), &Uint128::zero())
                 .unwrap();
             let mut env = mock_env();
             let info = mock_info(&before_all.default_sender.to_string(), &[]);
@@ -2939,13 +2926,10 @@ mod tests {
             default_init(deps.as_mut());
             let state = read_config(deps.as_mut().storage).unwrap();
             jackpot_storage(deps.as_mut().storage)
-                .save(
-                    &(state.lottery_counter - 1).to_be_bytes(),
-                    &JackpotInfo {
-                        ust: Uint128::zero(),
-                        alte: Uint128::zero(),
-                    },
-                )
+                .save(&(state.lottery_counter - 1).to_be_bytes(), &Uint128::zero())
+                .unwrap();
+            jackpot_storage_alte(deps.as_mut().storage)
+                .save(&(state.lottery_counter - 1).to_be_bytes(), &Uint128::zero())
                 .unwrap();
 
             let mut env = mock_env();
@@ -2973,11 +2957,11 @@ mod tests {
             jackpot_storage(deps.as_mut().storage)
                 .save(
                     &(state.lottery_counter - 1).to_be_bytes(),
-                    &JackpotInfo {
-                        ust: Uint128::from(1_000_000u128),
-                        alte: Uint128::zero(),
-                    },
+                    &Uint128::from(1_000_000_u128),
                 )
+                .unwrap();
+            jackpot_storage_alte(deps.as_mut().storage)
+                .save(&(state.lottery_counter - 1).to_be_bytes(), &Uint128::zero())
                 .unwrap();
 
             let state = read_config(deps.as_mut().storage).unwrap();
@@ -3007,10 +2991,13 @@ mod tests {
             jackpot_storage(deps.as_mut().storage)
                 .save(
                     &(state_before.lottery_counter - 1).to_be_bytes(),
-                    &JackpotInfo {
-                        ust: Uint128::from(1_000_000u128),
-                        alte: Uint128::zero(),
-                    },
+                    &Uint128::from(1_000_000_u128),
+                )
+                .unwrap();
+            jackpot_storage_alte(deps.as_mut().storage)
+                .save(
+                    &(state_before.lottery_counter - 1).to_be_bytes(),
+                    &Uint128::zero(),
                 )
                 .unwrap();
 
@@ -3078,10 +3065,13 @@ mod tests {
             jackpot_storage(deps.as_mut().storage)
                 .save(
                     &(state_before.lottery_counter - 1).to_be_bytes(),
-                    &JackpotInfo {
-                        ust: Uint128::from(1_000_000u128),
-                        alte: Uint128::zero(),
-                    },
+                    &Uint128::from(1_000_000_u128),
+                )
+                .unwrap();
+            jackpot_storage_alte(deps.as_mut().storage)
+                .save(
+                    &(state_before.lottery_counter - 1).to_be_bytes(),
+                    &Uint128::zero(),
                 )
                 .unwrap();
 
@@ -3130,10 +3120,13 @@ mod tests {
             jackpot_storage(deps.as_mut().storage)
                 .save(
                     &(state_before.lottery_counter - 1).to_be_bytes(),
-                    &JackpotInfo {
-                        ust: Uint128::from(1_000_000u128),
-                        alte: Uint128::zero(),
-                    },
+                    &Uint128::from(1_000_000_u128),
+                )
+                .unwrap();
+            jackpot_storage_alte(deps.as_mut().storage)
+                .save(
+                    &(state_before.lottery_counter - 1).to_be_bytes(),
+                    &Uint128::zero(),
                 )
                 .unwrap();
 
@@ -3247,10 +3240,13 @@ mod tests {
             jackpot_storage(deps.as_mut().storage)
                 .save(
                     &(state_before.lottery_counter - 1).to_be_bytes(),
-                    &JackpotInfo {
-                        ust: Uint128::from(1_000_000u128),
-                        alte: Uint128::from(1_000_000u128),
-                    },
+                    &Uint128::from(1_000_000u128),
+                )
+                .unwrap();
+            jackpot_storage_alte(deps.as_mut().storage)
+                .save(
+                    &(state_before.lottery_counter - 1).to_be_bytes(),
+                    &Uint128::from(1_000_000u128),
                 )
                 .unwrap();
 
@@ -3364,10 +3360,14 @@ mod tests {
             jackpot_storage(deps.as_mut().storage)
                 .save(
                     &(state_before.lottery_counter - 1).to_be_bytes(),
-                    &JackpotInfo {
-                        ust: Uint128::from(1_000_000u128),
-                        alte: Uint128::zero(),
-                    },
+                    &Uint128::from(1_000_000u128),
+                )
+                .unwrap();
+
+            jackpot_storage_alte(deps.as_mut().storage)
+                .save(
+                    &(state_before.lottery_counter - 1).to_be_bytes(),
+                    &Uint128::zero(),
                 )
                 .unwrap();
 

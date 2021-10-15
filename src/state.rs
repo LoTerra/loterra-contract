@@ -17,6 +17,7 @@ const TICKET_COUNT_KEY: &[u8] = b"ticket";
 const JACKPOT_KEY: &[u8] = b"jackpot";
 const PLAYERS_KEY: &[u8] = b"players";
 const ADDRESS_KEY: &[u8] = b"address";
+const JACKPOT_KEY_ALTE: &[u8] = b"jackpotalte";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct Config {
@@ -282,17 +283,20 @@ pub fn lottery_winning_combination_storage_read(storage: &dyn Storage) -> Readon
     bucket_read(storage, WINNING_COMBINATION_KEY)
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct JackpotInfo {
-    pub ust: Uint128,
-    pub alte: Uint128,
-}
-pub fn jackpot_storage(storage: &mut dyn Storage) -> Bucket<JackpotInfo> {
+pub fn jackpot_storage(storage: &mut dyn Storage) -> Bucket<Uint128> {
     bucket(storage, JACKPOT_KEY)
 }
 
-pub fn jackpot_storage_read(storage: &dyn Storage) -> ReadonlyBucket<JackpotInfo> {
+pub fn jackpot_storage_read(storage: &dyn Storage) -> ReadonlyBucket<Uint128> {
     bucket_read(storage, JACKPOT_KEY)
+}
+
+pub fn jackpot_storage_alte(storage: &mut dyn Storage) -> Bucket<Uint128> {
+    bucket(storage, JACKPOT_KEY_ALTE)
+}
+
+pub fn jackpot_storage_read_alte(storage: &dyn Storage) -> ReadonlyBucket<Uint128> {
+    bucket_read(storage, JACKPOT_KEY_ALTE)
 }
 
 pub fn all_players_storage(storage: &mut dyn Storage) -> Bucket<Vec<CanonicalAddr>> {

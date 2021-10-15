@@ -187,13 +187,36 @@
       "additionalProperties": false
     },
     {
-      "description": "Get the jackpot by lottery id",
+      "description": "Get the jackpot by lottery id in UST",
       "type": "object",
       "required": [
         "jackpot"
       ],
       "properties": {
         "jackpot": {
+          "type": "object",
+          "required": [
+            "lottery_id"
+          ],
+          "properties": {
+            "lottery_id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Get the jackpot by lottery id in ALTE",
+      "type": "object",
+      "required": [
+        "jackpot_alte"
+      ],
+      "properties": {
+        "jackpot_alte": {
           "type": "object",
           "required": [
             "lottery_id"

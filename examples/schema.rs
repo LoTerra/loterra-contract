@@ -5,7 +5,7 @@ use cosmwasm_schema::{export_schema, export_schema_with_title, remove_schemas, s
 
 use loterra::msg::{
     AllCombinationResponse, AllWinnersResponse, ConfigResponse, ExecuteMsg, GetPollResponse,
-    InitMsg, JackpotResponse, QueryMsg, RoundResponse,
+    InitMsg, QueryMsg, RoundResponse,
 };
 
 fn main() {
@@ -34,9 +34,4 @@ fn main() {
         "GetPollResponse",
     );
     export_schema_with_title(&mut schema_for!(RoundResponse), &out_dir, "RoundResponse");
-    export_schema_with_title(
-        &mut schema_for!(JackpotResponse),
-        &out_dir,
-        "JackpotResponse",
-    );
 }
