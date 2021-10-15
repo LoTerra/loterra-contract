@@ -706,11 +706,6 @@ fn execute_collect(
         return Err(StdError::generic_err("Already claimed"));
     }
 
-    // Ensure the contract have sufficient balance to handle the transaction
-    if balance.amount < jackpot_reward {
-        return Err(StdError::generic_err("Not enough funds in the contract"));
-    }
-
     let mut total_prize: u128 = 0;
     let mut total_alte_prize: u128 = 0;
     for rank in rewards.clone().ranks {
@@ -743,8 +738,7 @@ fn execute_collect(
     let total_prize = Uint128::from(total_prize);
     let total_alte_prize = Uint128::from(total_alte_prize);
     /*
-        TODO : Add staking rewards fees
-        We will probably need to migrate our staking smart contract
+        TODO : Add staking rewards fees we will probably need to migrate our staking smart contract
     */
 
     // Amount token holders can claim of the reward as fee
