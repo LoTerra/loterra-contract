@@ -249,7 +249,7 @@ fn execute_register_alte(
     }
 
     // save combination
-    let addr_raw = deps.api.addr_canonicalize(&addr.to_string())?;
+    let addr_raw = deps.api.addr_canonicalize(&addr)?;
     combination_save(deps.storage, state.lottery_counter, addr_raw, combination)?;
 
     Ok(Response::new()
