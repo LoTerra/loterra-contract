@@ -648,10 +648,10 @@ fn execute_collect(
     let last_lottery_counter_round = state.lottery_counter - 1;
     let jackpot_reward = jackpot_storage_read(deps.storage)
         .load(&last_lottery_counter_round.to_be_bytes())
-        .unwrap_or(Uint128::zero());
+        .unwrap_or_else(|_| Uint128::zero());
     let jackpot_reward_alte = jackpot_storage_read_alte(deps.storage)
         .load(&last_lottery_counter_round.to_be_bytes())
-        .unwrap_or(Uint128::zero());
+        .unwrap_or_else(|_| Uint128::zero());
 
     // let player_amount = match count_player_by_lottery_read(deps.storage)
     //     .may_load(&last_lottery_counter_round.to_be_bytes())?
