@@ -16,11 +16,9 @@ use crate::state::{
     Config, PollInfoState, PollStatus, Proposal,
 };
 use crate::taxation::deduct_tax;
-#[cfg(not(feature = "library"))]
-use cosmwasm_std::entry_point;
 
 use cosmwasm_std::{
-    from_binary, to_binary, Addr, BankMsg, Binary, CanonicalAddr, Coin, CosmosMsg, Decimal, Deps,
+    entry_point, from_binary, to_binary, Addr, BankMsg, Binary, CanonicalAddr, Coin, CosmosMsg, Decimal, Deps,
     DepsMut, Env, MessageInfo, Order, Response, StdError, StdResult, SubMsg, Uint128, WasmMsg,
     WasmQuery,
 };
