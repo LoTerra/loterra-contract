@@ -18,9 +18,9 @@ use crate::state::{
 use crate::taxation::deduct_tax;
 
 use cosmwasm_std::{
-    entry_point, from_binary, to_binary, Addr, BankMsg, Binary, CanonicalAddr, Coin, CosmosMsg, Decimal, Deps,
-    DepsMut, Env, MessageInfo, Order, Response, StdError, StdResult, SubMsg, Uint128, WasmMsg,
-    WasmQuery,
+    entry_point, from_binary, to_binary, Addr, BankMsg, Binary, CanonicalAddr, Coin, CosmosMsg,
+    Decimal, Deps, DepsMut, Env, MessageInfo, Order, Response, StdError, StdResult, SubMsg,
+    Uint128, WasmMsg, WasmQuery,
 };
 use cw0::calc_range_start;
 use cw20::{BalanceResponse, Cw20ExecuteMsg, Cw20QueryMsg, Cw20ReceiveMsg};
