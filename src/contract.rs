@@ -90,7 +90,10 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
         } => execute_register(deps, env, info, address, altered_bonus, combination),
         ExecuteMsg::Play {} => execute_play(deps, env, info),
         ExecuteMsg::Claim { addresses } => execute_claim(deps, env, info, addresses),
-        ExecuteMsg::Collect { address } => execute_collect(deps, env, info, address),
+        ExecuteMsg::Collect {
+            address,
+            lottery_id,
+        } => execute_collect(deps, env, info, address, lottery_id),
         ExecuteMsg::Poll {
             description,
             proposal,
@@ -635,6 +638,7 @@ fn execute_collect(
     env: Env,
     info: MessageInfo,
     address: Option<Addr>,
+    lottery_id: Option<u64>,
 ) -> StdResult<Response> {
     // Ensure the sender is not sending funds
     if !info.funds.is_empty() {
@@ -643,7 +647,15 @@ fn execute_collect(
 
     // Load state
     let state = read_config(deps.storage)?;
-    let last_lottery_counter_round = state.lottery_counter - 1;
+    let last_lottery_counter_round = match lottery_id {
+        None => state.lottery_counter - 1,
+        Some(id) => id,
+    };
+    if last_lottery_counter_round > state.lottery_counter - 1 {
+        return Err(StdError::generic_err("Unauthorized"));
+    }
+
+    //let last_lottery_counter_round = state.lottery_counter - 1;
     let jackpot_reward = jackpot_storage_read(deps.storage)
         .load(&last_lottery_counter_round.to_be_bytes())
         .unwrap_or_else(|_| Uint128::zero());
@@ -665,6 +677,7 @@ fn execute_collect(
     }
     if env.block.time.seconds()
         < state.block_time_play - state.every_block_time_play / DIV_BLOCK_TIME_BY_X
+        && last_lottery_counter_round == state.lottery_counter - 1
     {
         // if player_amount.u128() as u64 != state.counter_claim {
         //     return Err(StdError::generic_err("Collecting jackpot is closed"));
@@ -2842,7 +2855,10 @@ mod tests {
             store_config(deps.as_mut().storage, &state).unwrap();
             let env = mock_env();
             let info = mock_info(&before_all.default_sender.to_string(), &[]);
-            let msg = ExecuteMsg::Collect { address: None };
+            let msg = ExecuteMsg::Collect {
+                address: None,
+                lottery_id: None,
+            };
             let res = execute(deps.as_mut(), env, info.clone(), msg);
             match res {
                 Err(GenericErr { msg }) => assert_eq!(
@@ -2868,7 +2884,10 @@ mod tests {
                     amount: Uint128::from(1_000u128),
                 }],
             );
-            let msg = ExecuteMsg::Collect { address: None };
+            let msg = ExecuteMsg::Collect {
+                address: None,
+                lottery_id: None,
+            };
             let res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
             println!("{:?}", res);
             match res {
@@ -2903,7 +2922,10 @@ mod tests {
             let info = mock_info(&before_all.default_sender.to_string(), &[]);
             env.block.time =
                 Timestamp::from_seconds(state.block_time_play - state.every_block_time_play);
-            let msg = ExecuteMsg::Collect { address: None };
+            let msg = ExecuteMsg::Collect {
+                address: None,
+                lottery_id: None,
+            };
             let res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
             match res {
                 Err(GenericErr { msg }) => assert_eq!(msg, "Collecting jackpot is closed"),
@@ -2931,7 +2953,10 @@ mod tests {
             env.block.time =
                 Timestamp::from_seconds(state.block_time_play - state.every_block_time_play / 2);
 
-            let msg = ExecuteMsg::Collect { address: None };
+            let msg = ExecuteMsg::Collect {
+                address: None,
+                lottery_id: None,
+            };
             let res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
             match res {
                 Err(GenericErr { msg }) => assert_eq!(msg, "No jackpot reward"),
@@ -2964,7 +2989,10 @@ mod tests {
             env.block.time =
                 Timestamp::from_seconds(state.block_time_play - state.every_block_time_play / 2);
 
-            let msg = ExecuteMsg::Collect { address: None };
+            let msg = ExecuteMsg::Collect {
+                address: None,
+                lottery_id: None,
+            };
             let res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
 
             match res {
@@ -3025,7 +3053,10 @@ mod tests {
             env.block.time =
                 Timestamp::from_seconds(state.block_time_play - state.every_block_time_play / 2);
 
-            let msg = ExecuteMsg::Collect { address: None };
+            let msg = ExecuteMsg::Collect {
+                address: None,
+                lottery_id: None,
+            };
             let res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
 
             println!("{:?}", res);
@@ -3089,7 +3120,10 @@ mod tests {
             env.block.time = Timestamp::from_seconds(
                 state_before.block_time_play - state_before.every_block_time_play / 2,
             );
-            let msg = ExecuteMsg::Collect { address: None };
+            let msg = ExecuteMsg::Collect {
+                address: None,
+                lottery_id: None,
+            };
             let res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
 
             println!("{:?}", res);
@@ -3146,7 +3180,10 @@ mod tests {
                 state_before.block_time_play - state_before.every_block_time_play / 2,
             );
 
-            let msg = ExecuteMsg::Collect { address: None };
+            let msg = ExecuteMsg::Collect {
+                address: None,
+                lottery_id: None,
+            };
             let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
             println!("{:?}", res);
             assert_eq!(res.messages.len(), 2);
@@ -3177,7 +3214,10 @@ mod tests {
                 }))
             );
             // Handle can't claim multiple times
-            let msg = ExecuteMsg::Collect { address: None };
+            let msg = ExecuteMsg::Collect {
+                address: None,
+                lottery_id: None,
+            };
             let res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
 
             match res {
@@ -3214,7 +3254,10 @@ mod tests {
             env.block.time = Timestamp::from_seconds(
                 state_before.block_time_play - state_before.every_block_time_play / 2,
             );
-            let msg = ExecuteMsg::Collect { address: None };
+            let msg = ExecuteMsg::Collect {
+                address: None,
+                lottery_id: None,
+            };
             let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
             println!("{:?}", res);
             assert_eq!(res.messages.len(), 2);
@@ -3264,6 +3307,7 @@ mod tests {
 
             let msg = ExecuteMsg::Collect {
                 address: Some(before_all.default_sender.clone()),
+                lottery_id: None,
             };
             let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
             println!("{:?}", res);
@@ -3307,6 +3351,7 @@ mod tests {
             // Handle can't claim multiple times
             let msg = ExecuteMsg::Collect {
                 address: Some(before_all.default_sender.clone()),
+                lottery_id: None,
             };
             let res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
 
@@ -3389,7 +3434,10 @@ mod tests {
             env.block.time =
                 Timestamp::from_seconds(state.block_time_play - state.every_block_time_play / 2);
 
-            let msg = ExecuteMsg::Collect { address: None };
+            let msg = ExecuteMsg::Collect {
+                address: None,
+                lottery_id: None,
+            };
             let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
             assert_eq!(res.messages.len(), 2);
@@ -3420,7 +3468,10 @@ mod tests {
                 }))
             );
             // Handle can't claim multiple times
-            let msg = ExecuteMsg::Collect { address: None };
+            let msg = ExecuteMsg::Collect {
+                address: None,
+                lottery_id: None,
+            };
             let res = execute(deps.as_mut(), env.clone(), info.clone(), msg);
 
             match res {

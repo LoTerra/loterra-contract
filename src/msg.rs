@@ -32,7 +32,10 @@ pub enum ExecuteMsg {
     /// Claim jackpot
     Claim { addresses: Option<Vec<Addr>> },
     /// Collect jackpot
-    Collect { address: Option<Addr> },
+    Collect {
+        address: Option<Addr>,
+        lottery_id: Option<u64>,
+    },
     /// DAO
     /// Make a proposal
     Poll {
